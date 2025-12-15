@@ -34,8 +34,8 @@
 boolean
 M_WriteFile
 ( char const*	name,
-  void*		source,
-  int		length );
+  void*		    source,
+  size_t        size );
 
 int
 M_ReadFile

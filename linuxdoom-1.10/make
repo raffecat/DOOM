@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+clang -g -Wall -DNORMALUNIX=1 -I../platform \
+  -I /opt/homebrew/Cellar/sdl2/2.32.0/include -L /opt/homebrew/Cellar/sdl2/2.32.0/lib -l SDL2 \
+  *.c ../platform/*.c -o ../doom

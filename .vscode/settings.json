@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "DOOMNET.C": "cpp",
+        "PORT.C": "cpp",
+        "limits.h": "c",
+        "IPXNET.C": "cpp",
+        "doomtype.h": "c",
+        "IPXSETUP.C": "cpp",
+        "stdint.h": "c",
+        "i_device.h": "c",
+        "platform.h": "c",
+        "SERSETUP.C": "cpp"
+    },
+    "editor.tabSize": 8,
+    "editor.autoIndent": "full",
+"editor.detectIndentation": false,
+"workbench.tree.indent": 8,
+"editor.insertSpaces": false
+}

@@ -59,6 +59,8 @@ rcsid[] = "$Id: m_misc.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include "m_misc.h"
 
+#include "i_device.h"
+
 //
 // M_DrawText
 // Returns the final X coordinate
@@ -113,22 +115,13 @@ boolean
 M_WriteFile
 ( char const*	name,
   void*		source,
-  int		length )
+  size_t	length )
 {
-    int		handle;
-    int		count;
-	
-    handle = open ( name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+    Buffer_Create(ddev_savebuf, length, 0);
+    memcpy (Buffer_Address(ddev_savebuf), source, length);
+    Storage_CreateObject(name, ddev_savebuf, length);
+    Buffer_Destroy(ddev_savebuf);
 
-    if (handle == -1)
-	return false;
-
-    count = write (handle, source, length);
-    close (handle);
-	
-    if (count < length)
-	return false;
-		
     return true;
 }
 
@@ -141,22 +134,17 @@ M_ReadFile
 ( char const*	name,
   byte**	buffer )
 {
-    int	handle, count, length;
-    struct stat	fileinfo;
-    byte		*buf;
+    int	length;
+    byte *buf;
+    cap_t handle;
 	
-    handle = open (name, O_RDONLY | O_BINARY, 0666);
-    if (handle == -1)
+    if (!(handle = Storage_FindObject(name)))
 	I_Error ("Couldn't read file %s", name);
-    if (fstat (handle,&fileinfo) == -1)
-	I_Error ("Couldn't read file %s", name);
-    length = fileinfo.st_size;
+
+    length = (int) Storage_ObjectSize(handle); // XXX cast hack
     buf = Z_Malloc (length, PU_STATIC, NULL);
-    count = read (handle, buf, length);
-    close (handle);
-	
-    if (count < length)
-	I_Error ("Couldn't read file %s", name);
+    memcpy (buf, Buffer_Address(ddev_savebuf), length);
+    Buffer_Destroy (ddev_savebuf);
 		
     *buffer = buf;
     return length;
@@ -277,7 +265,7 @@ default_t	defaults[] =
     {"joyb_use",&joybuse,3},
     {"joyb_speed",&joybspeed,2},
 
-    {"screenblocks",&screenblocks, 9},
+    {"screenblocks",&screenblocks, 10},
     {"detaillevel",&detailLevel, 0},
 
     {"snd_channels",&numChannels, 3},
@@ -531,7 +519,7 @@ void M_ScreenShot (void)
     {
 	lbmname[4] = i/10 + '0';
 	lbmname[5] = i%10 + '0';
-	if (access(lbmname,0) == -1)
+	if (!Storage_ObjectExists(lbmname))
 	    break;	// file doesn't exist
     }
     if (i==100)

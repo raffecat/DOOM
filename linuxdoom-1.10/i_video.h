@@ -36,6 +36,7 @@
 // and sets up the video mode
 void I_InitGraphics (void);
 
+void I_WaitOKToDraw(void);
 
 void I_ShutdownGraphics(void);
 

@@ -168,12 +168,12 @@ int mix(void)
 
 	if (channels[0])
 	{
-	    sample = *channels[0];
-	    dl += channelleftvol_lookup[0][sample];
-	    dr += channelrightvol_lookup[0][sample];
-	    channelstepremainder[0] += channelstep[0];
-	    channels[0] += channelstepremainder[0] >> 16;
-	    channelstepremainder[0] &= 65536-1;
+	    sample = *channels[0];                         // get sample at sample pointer
+	    dl += channelleftvol_lookup[0][sample];        // apply volume/pan
+	    dr += channelrightvol_lookup[0][sample];       // apply volume/pan
+	    channelstepremainder[0] += channelstep[0];     // advance accum 16.16 by step 16.16
+	    channels[0] += channelstepremainder[0] >> 16;  // advance sample pointer by accum 16.0
+	    channelstepremainder[0] &= 65536-1;            // retain 0.16 only
 
 	    if (channels[0] >= channelsend[0])
 		channels[0] = 0;
@@ -278,7 +278,7 @@ int mix(void)
 	// else if (dr < -128) *rightout = -128;
 	// else *rightout = dr;
 	
-	if (dl > 0x7fff)
+	if (dl > 0x7fff)  // max 33026 * 8 = 264208 (0x40810)
 	    *leftout = 0x7fff;
 	else if (dl < -0x8000)
 	    *leftout = -0x8000;
@@ -419,9 +419,9 @@ void updatesounds(void)
 int
 addsfx
 ( int		sfxid,
-  int		volume,
-  int		step,
-  int		seperation )
+  int		volume,       // 0-127
+  int		step,         // 16.16 pitch inverse
+  int		seperation )  // pan 1 - 256
 {
     static unsigned short	handlenums = 0;
  
@@ -467,8 +467,8 @@ addsfx
     else
 	slot = i;
 
-    channels[slot] = (unsigned char *) S_sfx[sfxid].data;
-    channelsend[slot] = channels[slot] + lengths[sfxid];
+    channels[slot] = (unsigned char *) S_sfx[sfxid].data;  // start
+    channelsend[slot] = channels[slot] + lengths[sfxid];   // end
 
     if (!handlenums)
 	handlenums = 100;
@@ -484,8 +484,10 @@ addsfx
     // (x^2 seperation)
     leftvol =
 	volume - (volume*seperation*seperation)/(256*256);
+		// 127 - 127*1*1 / (256*256) = 126.99
+		// 127 - 127*256*256 / (256*256) = 0
 
-    seperation = seperation - 257;
+    seperation = seperation - 257; // -256 to -1
 
     // (x^2 seperation)
     rightvol =
@@ -564,7 +566,7 @@ void initdata(void)
     
     for (i=0 ; i<128 ; i++)
 	for (j=0 ; j<256 ; j++)
-	    vol_lookup[i*256+j] = (i*(j-128)*256)/127;
+	    vol_lookup[i*256+j] = (i*(j-128)*256)/127; // max 33026
 
 }
 
@@ -664,7 +666,7 @@ main
 			    }
 
 			    commandbuf[0] -=
-				commandbuf[0]>='a' ? 'a'-10 : '0';
+				commandbuf[0]>='a' ? 'a'-10 : '0'; // hex
 			    commandbuf[1] -=
 				commandbuf[1]>='a' ? 'a'-10 : '0';
 			    commandbuf[2] -=
@@ -692,12 +694,12 @@ main
 			    //	outputushort(handle);
 			    break;
 			    
-			  case 'q':
+			  case 'q': // quit
 			    read(0, commandbuf, 1);
 			    waitingtofinish = 1; rc = 0;
 			    break;
 			    
-			  case 's':
+			  case 's': // save/debug?
 			  {
 			      int fd;
 			      read(0, commandbuf, 3);

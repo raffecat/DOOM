@@ -29,6 +29,9 @@
 #endif
 
 
+#include "platform.h"
+
+
 //
 // TYPES
 //

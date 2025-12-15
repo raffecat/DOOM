@@ -78,6 +78,8 @@ rcsid[] = "$Id: d_main.c,v 1.8 1997/02/03 22:45:09 b1 Exp $";
 
 #include "d_main.h"
 
+#include "platform.h"
+
 //
 // D-DoomLoop()
 // Not a globally visible function,
@@ -342,6 +344,7 @@ void D_Display (void)
 	I_UpdateNoBlit ();
 	M_Drawer ();                            // menu is drawn even on top of wipes
 	I_FinishUpdate ();                      // page flip or blit buffer
+	I_StartFrame ();                        // must start a new frame
     } while (!done);
 }
 
@@ -395,15 +398,11 @@ void D_DoomLoop (void)
 	// Update display, next frame, with current state.
 	D_Display ();
 
-#ifndef SNDSERV
 	// Sound mixing for the buffer is snychronous.
 	I_UpdateSound();
-#endif	
+
 	// Synchronous sound output is explicitly called.
-#ifndef SNDINTR
-	// Update sound output.
 	I_SubmitSound();
-#endif
     }
 }
 
@@ -573,7 +572,6 @@ void IdentifyVersion (void)
     char*	plutoniawad;
     char*	tntwad;
 
-#ifdef NORMALUNIX
     char *home;
     char *doomwaddir;
     doomwaddir = getenv("DOOMWADDIR");
@@ -613,7 +611,7 @@ void IdentifyVersion (void)
     if (!home)
       I_Error("Please set $HOME to your home directory");
     sprintf(basedefault, "%s/.doomrc", home);
-#endif
+
 
     if (M_CheckParm ("-shdev"))
     {
@@ -656,7 +654,7 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( !access (doom2fwad,R_OK) )
+    if ( Storage_ObjectExists(doom2fwad) )
     {
 	gamemode = commercial;
 	// C'est ridicule!
@@ -667,42 +665,42 @@ void IdentifyVersion (void)
 	return;
     }
 
-    if ( !access (doom2wad,R_OK) )
+    if ( Storage_ObjectExists(doom2wad) )
     {
 	gamemode = commercial;
 	D_AddFile (doom2wad);
 	return;
     }
 
-    if ( !access (plutoniawad, R_OK ) )
+    if ( Storage_ObjectExists(plutoniawad) )
     {
       gamemode = commercial;
       D_AddFile (plutoniawad);
       return;
     }
 
-    if ( !access ( tntwad, R_OK ) )
+    if ( Storage_ObjectExists(tntwad) )
     {
       gamemode = commercial;
       D_AddFile (tntwad);
       return;
     }
 
-    if ( !access (doomuwad,R_OK) )
+    if ( Storage_ObjectExists(doomuwad) )
     {
       gamemode = retail;
       D_AddFile (doomuwad);
       return;
     }
 
-    if ( !access (doomwad,R_OK) )
+    if ( Storage_ObjectExists(doomwad) )
     {
       gamemode = registered;
       D_AddFile (doomwad);
       return;
     }
 
-    if ( !access (doom1wad,R_OK) )
+    if ( Storage_ObjectExists(doom1wad) )
     {
       gamemode = shareware;
       D_AddFile (doom1wad);

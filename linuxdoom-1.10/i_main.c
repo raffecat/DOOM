@@ -30,6 +30,12 @@ rcsid[] = "$Id: i_main.c,v 1.4 1997/02/03 22:45:10 b1 Exp $";
 
 #include "m_argv.h"
 #include "d_main.h"
+#include "i_device.h"
+
+
+// main queue
+size_t main_q;
+size_t sound_q;
 
 int
 main
@@ -38,6 +44,11 @@ main
 { 
     myargc = argc; 
     myargv = argv; 
+
+    System_Init(); // XXX would be in CRT
+
+    Queue_New(ddev_main_q, dio_main_q, 1);
+    Queue_New(ddev_sound_q, dio_sound_q, 1);
  
     D_DoomMain (); 
 
