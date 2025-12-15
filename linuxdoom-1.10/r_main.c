@@ -805,7 +805,7 @@ R_PointInSubsector
 {
     node_t*	node;
     int		side;
-    int		nodenum;
+    unsigned short nodenum;
 
     // single subsector is a special case
     if (!numnodes)				

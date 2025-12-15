@@ -721,6 +721,9 @@ R_StoreWallRange
 	memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
 	ds_p->sprtopclip = lastopening - start;
 	lastopening += rw_stopx - start;
+	if ((size_t)lastopening > (size_t)endofopenings) {
+		I_Error("R_StoreWallRange: overflowed openings");
+	}
     }
     
     if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
@@ -729,6 +732,9 @@ R_StoreWallRange
 	memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
 	ds_p->sprbottomclip = lastopening - start;
 	lastopening += rw_stopx - start;	
+	if ((size_t)lastopening > (size_t)endofopenings) {
+		I_Error("R_StoreWallRange: overflowed openings");
+	}
     }
 
     if (maskedtexture && !(ds_p->silhouette&SIL_TOP))

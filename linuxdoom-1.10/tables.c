@@ -48,10 +48,10 @@ rcsid[] = "$Id: tables.c,v 1.4 1997/02/03 16:47:57 b1 Exp $";
 
 int
 SlopeDiv
-( unsigned	num,
-  unsigned	den)
+( uint32_t	num,
+  uint32_t	den)
 {
-    unsigned 	ans;
+    uint32_t 	ans;
     
     if (den < 512)
 	return SLOPERANGE;

@@ -75,7 +75,7 @@ extern fixed_t		finetangent[FINEANGLES/2];
 #define SLOPEBITS		11
 #define DBITS			(FRACBITS-SLOPEBITS)
 
-typedef unsigned angle_t;
+typedef uint32_t angle_t;
 
 
 // Effective size is 2049;
@@ -88,8 +88,8 @@ extern angle_t		tantoangle[SLOPERANGE+1];
 //  called by R_PointToAngle.
 int
 SlopeDiv
-( unsigned	num,
-  unsigned	den);
+( uint32_t	num,
+  uint32_t	den);
 
 
 #endif

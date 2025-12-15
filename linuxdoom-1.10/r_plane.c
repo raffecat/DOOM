@@ -59,6 +59,7 @@ visplane_t*		ceilingplane;
 #define MAXOPENINGS	SCREENWIDTH*64
 short			openings[MAXOPENINGS];
 short*			lastopening;
+short*			endofopenings;
 
 
 //
@@ -196,6 +197,7 @@ void R_ClearPlanes (void)
 
     lastvisplane = visplanes;
     lastopening = openings;
+    endofopenings = openings + MAXOPENINGS;
     
     // texture calculation
     memset (cachedheight, 0, sizeof(cachedheight));

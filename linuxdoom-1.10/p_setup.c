@@ -46,6 +46,10 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "doomstat.h"
 
 
+#define FIXED_SHORT(S) ((fixed_t)(((uint32_t)SHORT(S))<<FRACBITS))
+#define ANGLE_SHORT(S) ((angle_t)(((uint32_t)SHORT(S))<<FRACBITS))
+
+
 void	P_SpawnMapThing (mapthing_t*	mthing);
 
 
@@ -143,8 +147,8 @@ void P_LoadVertexes (int lump)
     // internal representation as fixed.
     for (i=0 ; i<numvertexes ; i++, li++, ml++)
     {
-	li->x = SHORT(ml->x)<<FRACBITS;
-	li->y = SHORT(ml->y)<<FRACBITS;
+	li->x = FIXED_SHORT(ml->x);
+	li->y = FIXED_SHORT(ml->y);
     }
 
     // Free buffer memory.
@@ -175,11 +179,16 @@ void P_LoadSegs (int lump)
     li = segs;
     for (i=0 ; i<numsegs ; i++, li++, ml++)
     {
+	if (ml->v1 < 0 || ml->v1 >= numvertexes) I_Error ("P_LoadSegs: invalid vertex v1 %i ", ml->v1);
+	if (ml->v2 < 0 || ml->v2 >= numvertexes) I_Error ("P_LoadSegs: invalid vertex v2 %i ", ml->v2);
+	if (ml->linedef < 0 || ml->linedef >= numlines) I_Error ("P_LoadSegs: invalid linedef %i ", ml->linedef);
+	if (ml->side != 0 && ml->side != 1) I_Error ("P_LoadSegs: invalid side %i ", ml->side);
+
 	li->v1 = &vertexes[SHORT(ml->v1)];
 	li->v2 = &vertexes[SHORT(ml->v2)];
 					
-	li->angle = (SHORT(ml->angle))<<16;
-	li->offset = (SHORT(ml->offset))<<16;
+	li->angle = ANGLE_SHORT(ml->angle); // <<16 was hardcoded
+	li->offset = FIXED_SHORT(ml->offset); // <<16 was hardcoded
 	linedef = SHORT(ml->linedef);
 	ldef = &lines[linedef];
 	li->linedef = ldef;
@@ -244,8 +253,8 @@ void P_LoadSectors (int lump)
     ss = sectors;
     for (i=0 ; i<numsectors ; i++, ss++, ms++)
     {
-	ss->floorheight = SHORT(ms->floorheight)<<FRACBITS;
-	ss->ceilingheight = SHORT(ms->ceilingheight)<<FRACBITS;
+	ss->floorheight = FIXED_SHORT(ms->floorheight);
+	ss->ceilingheight = FIXED_SHORT(ms->ceilingheight);
 	ss->floorpic = R_FlatNumForName(ms->floorpic);
 	ss->ceilingpic = R_FlatNumForName(ms->ceilingpic);
 	ss->lightlevel = SHORT(ms->lightlevel);
@@ -279,15 +288,15 @@ void P_LoadNodes (int lump)
     
     for (i=0 ; i<numnodes ; i++, no++, mn++)
     {
-	no->x = SHORT(mn->x)<<FRACBITS;
-	no->y = SHORT(mn->y)<<FRACBITS;
-	no->dx = SHORT(mn->dx)<<FRACBITS;
-	no->dy = SHORT(mn->dy)<<FRACBITS;
+	no->x = FIXED_SHORT(mn->x);
+	no->y = FIXED_SHORT(mn->y);
+	no->dx = FIXED_SHORT(mn->dx);
+	no->dy = FIXED_SHORT(mn->dy);
 	for (j=0 ; j<2 ; j++)
 	{
 	    no->children[j] = SHORT(mn->children[j]);
 	    for (k=0 ; k<4 ; k++)
-		no->bbox[j][k] = SHORT(mn->bbox[j][k])<<FRACBITS;
+		no->bbox[j][k] = FIXED_SHORT(mn->bbox[j][k]);;
 	}
     }
 	
@@ -372,6 +381,9 @@ void P_LoadLineDefs (int lump)
     ld = lines;
     for (i=0 ; i<numlines ; i++, mld++, ld++)
     {
+	if (mld->v1 < 0 || mld->v1 >= numvertexes) I_Error ("P_LoadLineDefs: invalid vertex v1 %i ", mld->v1);
+	if (mld->v2 < 0 || mld->v2 >= numvertexes) I_Error ("P_LoadLineDefs: invalid vertex v2 %i ", mld->v2);
+
 	ld->flags = SHORT(mld->flags);
 	ld->special = SHORT(mld->special);
 	ld->tag = SHORT(mld->tag);
@@ -417,14 +429,16 @@ void P_LoadLineDefs (int lump)
 	ld->sidenum[0] = SHORT(mld->sidenum[0]);
 	ld->sidenum[1] = SHORT(mld->sidenum[1]);
 
-	if (ld->sidenum[0] != -1)
+	if (ld->sidenum[0] != -1) {
+	    if (ld->sidenum[0] < 0 || ld->sidenum[0] >= numsides) I_Error ("P_LoadLineDefs: invalid sidenum[0] %i ", ld->sidenum[0]);
 	    ld->frontsector = sides[ld->sidenum[0]].sector;
-	else
+	} else
 	    ld->frontsector = 0;
 
-	if (ld->sidenum[1] != -1)
+	if (ld->sidenum[1] != -1) {
+	    if (ld->sidenum[1] < 0 || ld->sidenum[1] >= numsides) I_Error ("P_LoadLineDefs: invalid sidenum[1] %i ", ld->sidenum[1]);
 	    ld->backsector = sides[ld->sidenum[1]].sector;
-	else
+	} else
 	    ld->backsector = 0;
     }
 	
@@ -451,8 +465,10 @@ void P_LoadSideDefs (int lump)
     sd = sides;
     for (i=0 ; i<numsides ; i++, msd++, sd++)
     {
-	sd->textureoffset = SHORT(msd->textureoffset)<<FRACBITS;
-	sd->rowoffset = SHORT(msd->rowoffset)<<FRACBITS;
+	if (msd->sector < 0 || msd->sector > numsectors) I_Error("P_LoadSideDefs: invalid sector %i", msd->sector);
+
+	sd->textureoffset = FIXED_SHORT(msd->textureoffset);
+	sd->rowoffset = FIXED_SHORT(msd->rowoffset);
 	sd->toptexture = R_TextureNumForName(msd->toptexture);
 	sd->bottomtexture = R_TextureNumForName(msd->bottomtexture);
 	sd->midtexture = R_TextureNumForName(msd->midtexture);
@@ -478,8 +494,8 @@ void P_LoadBlockMap (int lump)
     for (i=0 ; i<count ; i++)
 	blockmaplump[i] = SHORT(blockmaplump[i]);
 		
-    bmaporgx = blockmaplump[0]<<FRACBITS;
-    bmaporgy = blockmaplump[1]<<FRACBITS;
+    bmaporgx = FIXED_SHORT(blockmaplump[0]);
+    bmaporgy = FIXED_SHORT(blockmaplump[1]);
     bmapwidth = blockmaplump[2];
     bmapheight = blockmaplump[3];
 	

@@ -79,8 +79,8 @@ void R_ClearDrawSegs (void)
 //
 typedef	struct
 {
-    int	first;
-    int last;
+    int32_t first;
+    int32_t last;
     
 } cliprange_t;
 
@@ -102,8 +102,8 @@ cliprange_t	solidsegs[MAXSEGS];
 // 
 void
 R_ClipSolidWallSegment
-( int			first,
-  int			last )
+( int32_t		first,
+  int32_t		last )
 {
     cliprange_t*	next;
     cliprange_t*	start;
@@ -195,8 +195,8 @@ R_ClipSolidWallSegment
 //
 void
 R_ClipPassWallSegment
-( int	first,
-  int	last )
+( int32_t	first,
+  int32_t	last )
 {
     cliprange_t*	start;
 
@@ -258,8 +258,8 @@ void R_ClearClipSegs (void)
 //
 void R_AddLine (seg_t*	line)
 {
-    int			x1;
-    int			x2;
+    int32_t		x1;
+    int32_t		x2;
     angle_t		angle1;
     angle_t		angle2;
     angle_t		span;
@@ -380,9 +380,9 @@ int	checkcoord[12][4] =
 
 boolean R_CheckBBox (fixed_t*	bspcoord)
 {
-    int			boxx;
-    int			boxy;
-    int			boxpos;
+    int32_t		boxx;
+    int32_t		boxy;
+    int32_t		boxpos;
 
     fixed_t		x1;
     fixed_t		y1;
@@ -396,8 +396,8 @@ boolean R_CheckBBox (fixed_t*	bspcoord)
     
     cliprange_t*	start;
 
-    int			sx1;
-    int			sx2;
+    int32_t		sx1;
+    int32_t		sx2;
     
     // Find the corners of the box
     // that define the edges from current viewpoint.
@@ -496,7 +496,7 @@ boolean R_CheckBBox (fixed_t*	bspcoord)
 //
 void R_Subsector (int num)
 {
-    int			count;
+    int32_t		count;
     seg_t*		line;
     subsector_t*	sub;
 	
@@ -549,7 +549,7 @@ void R_Subsector (int num)
 // Renders all subsectors below a given node,
 //  traversing subtree recursively.
 // Just call with BSP root.
-void R_RenderBSPNode (int bspnum)
+void R_RenderBSPNode (unsigned short bspnum)
 {
     node_t*	bsp;
     int		side;
@@ -557,7 +557,7 @@ void R_RenderBSPNode (int bspnum)
     // Found a subsector?
     if (bspnum & NF_SUBSECTOR)
     {
-	if (bspnum == -1)			
+	if (bspnum == 0xFFFF)			
 	    R_Subsector (0);
 	else
 	    R_Subsector (bspnum&(~NF_SUBSECTOR));
