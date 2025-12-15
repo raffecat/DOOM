@@ -57,6 +57,8 @@ rcsid[] = "$Id: r_data.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 // 
 
 
+// MapTexture WAD format:
+#pragma pack(push,1)
 
 //
 // Texture definition.
@@ -91,6 +93,8 @@ typedef struct
     short		patchcount;
     mappatch_t	patches[1];
 } maptexture_t;
+
+#pragma pack(pop)
 
 
 // A single patch from a texture definition,

@@ -282,11 +282,13 @@ typedef struct
 
 
 // posts are runs of non masked source pixels
+#pragma pack(push,1)
 typedef struct
 {
     byte		topdelta;	// -1 is the last post in a column
     byte		length; 	// length data bytes follows
 } post_t;
+#pragma pack(pop)
 
 // column_t is a list of 0 or more post_t, (byte)-1 terminated
 typedef post_t	column_t;

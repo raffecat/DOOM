@@ -31,6 +31,8 @@
 #include "doomdef.h"
 
 
+#pragma pack(push,1)
+
 
 //
 // Map level types.
@@ -210,6 +212,7 @@ typedef struct
 } mapthing_t;
 
 
+#pragma pack(pop)
 
 
 
