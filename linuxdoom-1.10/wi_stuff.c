@@ -1572,7 +1572,7 @@ void WI_loadData(void)
     if (gamemode == commercial)
     {
 	NUMCMAPS = 32;								
-	lnames = (patch_t **) Z_Malloc(sizeof(patch_t*) * NUMCMAPS,
+	lnames = (patch_t **) Z_Malloc(sizeof(*lnames) * NUMCMAPS,
 				       PU_STATIC, 0);
 	for (i=0 ; i<NUMCMAPS ; i++)
 	{								
@@ -1582,7 +1582,7 @@ void WI_loadData(void)
     }
     else
     {
-	lnames = (patch_t **) Z_Malloc(sizeof(patch_t*) * NUMMAPS,
+	lnames = (patch_t **) Z_Malloc(sizeof(*lnames) * NUMMAPS,
 				       PU_STATIC, 0);
 	for (i=0 ; i<NUMMAPS ; i++)
 	{
