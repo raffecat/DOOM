@@ -69,7 +69,7 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 
 
 // Needed for calling the actual sound output. 316  316*4
-#define SAMPLECOUNT		360*4
+#define SAMPLECOUNT		356*4
 // Number of mixer channels.
 #define NUM_CHANNELS		8
 // Power of two greater/equal to number of mixer channels.
