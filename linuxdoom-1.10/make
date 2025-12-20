@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 
-clang -g -Wall -DNORMALUNIX=1 -I../platform -I../thirdparty \
-  -I /opt/homebrew/Cellar/sdl2/2.32.0/include -L /opt/homebrew/Cellar/sdl2/2.32.0/lib -l SDL2 \
-  *.c ../platform/*.c ../thirdparty/*.c -o ../doom
+OPL=woody-opl
+#OPL=Nuked-OPL3
+
+clang -g -Wall -DNORMALUNIX=1 -DOPLTYPE_IS_OPL3=1 \
+  -I../platform -I../thirdparty/musplayer \
+  -I../thirdparty/$OPL \
+  -I /opt/homebrew/Cellar/sdl2/2.32.0/include \
+  -L /opt/homebrew/Cellar/sdl2/2.32.0/lib \
+  -l SDL2 \
+  *.c \
+  ../platform/*.c \
+  ../thirdparty/musplayer/*.c \
+  ../thirdparty/$OPL/*.c \
+  -o ../doom

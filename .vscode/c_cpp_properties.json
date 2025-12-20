@@ -4,9 +4,10 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/thirdparty/**",
                 "/opt/homebrew/Cellar/sdl2/2.32.0/include"
             ],
-            "defines": [],
+            "defines": ["NORMALUNIX=1","OPLTYPE_IS_OPL3=1"],
             "compilerPath": "/usr/bin/clang",
             "cStandard": "c17",
             "cppStandard": "c++17",

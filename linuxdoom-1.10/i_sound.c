@@ -58,7 +58,13 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #include "doomdef.h"
 #include "i_device.h"
 
-#include "adlibemu.h"
+#ifdef OPL_NUKED
+#include "opl3.h"
+#else
+void adlib_init(uint32_t samplerate);
+void adlib_getsample(int16_t* sndptr, intptr_t numsamples);
+#endif
+
 #include "musplayer.h"
 
 
@@ -68,7 +74,7 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 //  mixing buffer, and the samplerate of the raw data.
 
 
-// Needed for calling the actual sound output. 316  316*4
+// Needed for calling the actual sound output. 316  316*4  356*4
 #define SAMPLECOUNT		356*4
 // Number of mixer channels.
 #define NUM_CHANNELS		8
@@ -78,7 +84,7 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #define BUFMUL                  4
 #define MIXBUFFERSIZE		(SAMPLECOUNT*BUFMUL)
 
-// 11025*4
+// 11025*4  44100  49716
 #define SAMPLERATE		49716
 #define SAMPLESIZE		2
 
@@ -91,7 +97,8 @@ static int 		lengths[NUMSFX];
 //  that is submitted to the audio device.
 static signed short	*mixbuffer; // [MIXBUFFERSIZE]
 
-static int16_t          music_mixbuffer[SAMPLECOUNT];
+// OPL3 generates a stereo pair for each sample.
+static int16_t          music_mixbuffer[SAMPLECOUNT*2];
 
 // The channel step amount...
 static unsigned int	channelstep[NUM_CHANNELS];
@@ -136,6 +143,13 @@ static int 	music_playing = 0;
 static void*    music_data = 0;
 static int      music_lasttic = 0;
 static int      music_volume = 63;
+#ifdef OPL_NUKED
+static opl3_chip music_opl3 = {0};
+
+void adlib_write(int reg, int val) {
+    OPL3_WriteReg(&music_opl3, reg, val);
+}
+#endif
 
 //
 // This function loads the sound data from the WAD lump,
@@ -539,8 +553,12 @@ void I_UpdateSound( void )
 	if (numtics > 0) {
 		music_playing = musplay_update(numtics);
 	}
-	// pull some samples from adlib.
-	adlib_getsample(&music_mixbuffer[0], SAMPLECOUNT);
+	// pull some samples from OPL.
+#ifdef OPL_NUKED
+	OPL3_GenerateStream(&music_opl3, music_mixbuffer, SAMPLECOUNT);
+#else
+	adlib_getsample(music_mixbuffer, SAMPLECOUNT);
+#endif
     }
 
     // Left and right channel
@@ -592,13 +610,15 @@ void I_UpdateSound( void )
 	}
 
 	if (music_on) {
-		int sample = *musicsample++;  // sample 1
-		// sample += *musicsample++;     // sample 2
-		// sample += *musicsample++;     // sample 3
-		// sample += *musicsample++;     // sample 4
+		int sample = *musicsample++;  // left channel
 		sample = (sample * music_volume) >> 7;
 		dl += sample;
+#if OPLTYPE_IS_OPL3 || OPL_NUKED
+		// OPL3 generates a stereo pair for each sample.
+		sample = *musicsample++;  // right channel
+		sample = (sample * music_volume) >> 7;
 		dr += sample;
+#endif
 	}
 
 	// Clamp to range. Left hardware channel.
@@ -766,7 +786,11 @@ I_InitSound()
 
   fprintf( stderr, " pre-cached all sound data\n");
 
+#ifdef OPL_NUKED
+  OPL3_Reset(&music_opl3, SAMPLERATE);
+#else
   adlib_init(SAMPLERATE);
+#endif
 
   fprintf( stderr, " initialised adlib player\n");
   
