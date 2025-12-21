@@ -18,6 +18,8 @@
 //  Internally used data structures for virtually everything,
 //   key definitions, lots of other stuff.
 //
+// MODIFIED:
+//   2025-12-21 AJT removed soundserver/SNDINTR and X11 stuff.
 //-----------------------------------------------------------------------------
 
 #ifndef __DOOMDEF__
@@ -74,20 +76,6 @@ typedef enum
 // most parameter validation debugging code will not be compiled
 #define RANGECHECK
 
-// Do or do not use external soundserver.
-// The sndserver binary to be run separately
-//  has been introduced by Dave Taylor.
-// The integrated sound support is experimental,
-//  and unfinished. Default is synchronous.
-// Experimental asynchronous timer based is
-//  handled by SNDINTR. 
-// #define SNDINTR  1
-
-
-// This one switches between MIT SHM (no proper mouse)
-// and XFree86 DGA (mickey sampling). The original
-// linuxdoom used SHM, which is default.
-//#define X11_DGA		1
 
 
 //

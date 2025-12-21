@@ -18,6 +18,8 @@
 //	Simple basic typedefs, isolated here to make it easier
 //	 separating modules.
 //    
+// MODIFIED:
+//      2025-12-21 AJT removed LINUX <value.h> replaced with standard <limits.h>
 //-----------------------------------------------------------------------------
 
 
@@ -38,9 +40,24 @@ typedef unsigned char byte;
 
 
 // Predefined with some OS.
-#ifdef LINUX
-#include <values.h>
+#include <limits.h>
+#if 1
+
+#define MAXCHAR		SCHAR_MAX
+#define MAXSHORT	SHRT_MAX
+
+// Max pos 32-bit int.
+#define MAXINT		INT_MAX
+#define MAXLONG		LONG_MAX
+#define MINCHAR		SCHAR_MIN
+#define MINSHORT	SHRT_MIN
+
+// Max negative 32-bit integer.
+#define MININT		INT_MIN
+#define MINLONG		LONG_MIN
+
 #else
+
 #define MAXCHAR		((char)0x7f)
 #define MAXSHORT	((short)0x7fff)
 
@@ -53,6 +70,7 @@ typedef unsigned char byte;
 // Max negative 32-bit integer.
 #define MININT		((int)0x80000000)	
 #define MINLONG		((long)0x80000000)
+
 #endif
 
 

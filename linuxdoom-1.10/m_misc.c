@@ -22,6 +22,9 @@
 //	Default Config File.
 //	PCX Screenshots.
 //
+// MODIFIED:
+//   2025-12-21 AJT removed soundserver/SNDINTR and X11 stuff.
+//
 //-----------------------------------------------------------------------------
 
 static const char __attribute__((unused))
@@ -194,18 +197,6 @@ extern int	showMessages;
 // machine-independent sound params
 extern	int	numChannels;
 
-
-// UNIX hack, to be removed.
-#ifdef SNDSERV
-extern char*	sndserver_filename;
-extern int	mb_used;
-#endif
-
-#ifdef LINUX
-char*		mousetype;
-char*		mousedev;
-#endif
-
 extern char*	chat_macros[];
 
 
@@ -276,14 +267,6 @@ default_t	defaults[] =
 };
 
 strdefault_t strdefaults[] = {
-#ifdef LINUX
-    {"mousedev", &mousedev, "/dev/ttyS0"},
-    {"mousetype", &mousetype, "microsoft"},
-#endif
-// UNIX hack, to be removed. 
-#ifdef SNDSERV
-    {"sndserver", &sndserver_filename, "sndserver"},
-#endif
     {"chatmacro0", &chat_macros[0], HUSTR_CHATMACRO0 },
     {"chatmacro1", &chat_macros[1], HUSTR_CHATMACRO1 },
     {"chatmacro2", &chat_macros[2], HUSTR_CHATMACRO2 },
