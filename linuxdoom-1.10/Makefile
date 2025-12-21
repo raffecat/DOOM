@@ -44,7 +44,7 @@ LDFLAGS+=$(SDL_L)
 LIBS+=-lm -lSDL2 # -lnsl
 
 # subdirectory for objects
-O=build
+O=../build
 BIN=..
 
 # not too sophisticated dependency
