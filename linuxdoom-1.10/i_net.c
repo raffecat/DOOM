@@ -18,6 +18,8 @@
 //
 // DESCRIPTION:
 //
+// MODIFIED:
+//   2025-12-21 AJT added `#ifndef ntohl` around the #define (x4)
 //-----------------------------------------------------------------------------
 
 static const char __attribute__((unused))
