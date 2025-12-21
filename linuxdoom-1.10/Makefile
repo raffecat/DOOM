@@ -36,7 +36,7 @@ endif
 CFLAGS+=-g -Wall \
 	-DNORMALUNIX \
 	-DOPLTYPE_IS_OPL3 \
-	-I../platform \
+	-I../thirdparty/platform \
 	-I../thirdparty/musplayer \
 	$(SDL_I) \
 	# -DUSEASM
@@ -136,7 +136,7 @@ $(O)/musplayer.o:	../thirdparty/musplayer/musplayer.c
 $(O)/opl.o:		../thirdparty/woody-opl/opl.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(O)/qrt_%.o:		../platform/qrt_%.c
+$(O)/qrt_%.o:		../thirdparty/platform/qrt_%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
