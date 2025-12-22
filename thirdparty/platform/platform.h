@@ -109,8 +109,16 @@ typedef struct Audio_FrameEventE {
     cap_t buf_cap;
 } Audio_FrameEvent;
 
+// Push Mode
 void Audio_Create(cap_t au_cap, cap_t s_queue, Audio_Opts opts, size_t channels, size_t sample_rate, size_t samples_per_frame);
 void Audio_Submit(cap_t au_cap, cap_t buf_cap); // TRANSFER buffer from Audio 'Frame' event
+
+// Pull Mode
+typedef void(*Audio_StreamCallback)(void* userdata, uint8_t* buffer, int sample_count);
+void Audio_CreateStream(cap_t au_cap, Audio_StreamCallback callback, Audio_Opts opts, size_t channels, size_t sample_rate, size_t samples_per_chunk);
+size_t Audio_SampleCount(cap_t au_cap);
+void Audio_Start(cap_t au_cap);
+void Audio_Stop(cap_t au_cap);
 
 
 // INPUT

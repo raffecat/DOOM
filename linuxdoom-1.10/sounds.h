@@ -49,7 +49,7 @@ struct sfxinfo_struct
     // volume if a link
     int		volume;
 
-    // sound data
+    // sound data (only used to resolve linked sounds!)
     void*	data;
 
     // this is checked every second to see if sound

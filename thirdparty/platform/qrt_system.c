@@ -10,6 +10,7 @@ typedef struct capinfoE {
     void* buf;
     size_t size;
     int fd;
+    uint32_t aud;
 } capinfo;
 
 static capinfo caps[1000] = {0};
@@ -91,6 +92,32 @@ void Task_Create(int (*fn)(void* args), void* args) {
         printf("[RT] SDL_CreateThread: %s\n", SDL_GetError());
     }
 }
+
+
+// MUTEXES
+
+void Mutex_Init(mutex_t* mu) {
+    mu->m = (void*) SDL_CreateMutex();
+    if (mu->m == NULL) {
+        printf("fatal: SDL_CreateMutex failed: %s\n", SDL_GetError());
+        exit(1);
+    }
+}
+
+void Mutex_Lock(mutex_t* mu) {
+    if (SDL_LockMutex((SDL_mutex*)(mu->m)) < 0) {
+        printf("fatal: SDL_LockMutex failed: %s\n", SDL_GetError());
+        exit(1);
+    }
+}
+
+void Mutex_Unlock(mutex_t* mu) {
+    if (SDL_UnlockMutex((SDL_mutex*)(mu->m)) < 0) {
+        printf("fatal: SDL_UnlockMutex failed: %s\n", SDL_GetError());
+        exit(1);
+    }
+}
+
 
 
 // BUFFERS
@@ -406,6 +433,47 @@ void Audio_Submit(cap_t au_cap, cap_t buf_cap) {
         }
     }
 }
+
+void Audio_CreateStream(cap_t au_cap, Audio_StreamCallback callback, Audio_Opts opts, size_t channels, size_t sample_rate, size_t samples_per_chunk) {
+    SDL_AudioSpec spec = {0};
+    SDL_AudioSpec obtained = {0};
+    spec.freq = sample_rate;
+    spec.format = AUDIO_S16;
+    spec.channels = channels;
+    // "This number should be a power of two":
+    // measured in sample-frames (groups of samples for all channels)
+    spec.samples = samples_per_chunk;
+    spec.callback = callback;
+    uint32_t device = SDL_OpenAudioDevice(NULL, 0, &spec, &obtained, SDL_AUDIO_ALLOW_SAMPLES_CHANGE);
+    if (device <= 0) {
+        printf("[RT] SDL_OpenAudioDevice: %s\n", SDL_GetError());
+        return;
+    }
+    caps[au_cap].aud = device;
+    caps[au_cap].size = obtained.samples;
+}
+
+size_t Audio_SampleCount(cap_t au_cap) {
+    if (caps[au_cap].aud != 0) {
+        return caps[au_cap].size;
+    }
+    return 0;
+}
+
+void Audio_Start(cap_t au_cap) {
+    // start pull-mode audio playback.
+    if (caps[au_cap].aud != 0) {
+        SDL_PauseAudioDevice(caps[au_cap].aud, 0);
+    }
+}
+
+void Audio_Stop(cap_t au_cap) {
+    // stop pull-mode audio playback.
+    if (caps[au_cap].aud != 0) {
+        SDL_CloseAudioDevice(caps[au_cap].aud);
+    }
+}
+
 
 
 // INPUT

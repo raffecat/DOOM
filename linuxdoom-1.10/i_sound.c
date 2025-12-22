@@ -48,6 +48,8 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #include "doomdef.h"
 #include "i_device.h"
 
+#include "musplayer.h"
+
 #if defined(OPL_NUKED)
 #include "opl3.h"
 #else
@@ -55,49 +57,52 @@ void adlib_init(uint32_t samplerate);
 void adlib_getsample(int16_t* sndptr, intptr_t numsamples);
 #endif
 
-#include "musplayer.h"
-
 
 // The number of internal mixing channels,
 //  the samples calculated for each mixing step,
 //  the size of the 16bit, 2 hardware channel (stereo)
 //  mixing buffer, and the samplerate of the raw data.
 
-// Step shift (divider) 1 for 22050, 2 for 44100
-#define STEP_SHIFT              1
-// Sample rate multiplier (over 11025) to make it easier to change (a hack)
-#define SR_MULTIPLIER           2
-// Needed for calling the actual sound output. 316  316*4  356*4
-#define SAMPLECOUNT		316*SR_MULTIPLIER
 // Number of mixer channels.
 #define NUM_CHANNELS		8
-// Power of two greater/equal to number of mixer channels.
+// Power of two >= the number of mixer channels (bitmasks)
 #define NUM_CHANNELS_POW2	8
-// It is 2 for 16bit, and 2 for two channels.
-#define BUFMUL                  4
-#define MIXBUFFERSIZE		(SAMPLECOUNT*BUFMUL)
+// Number of output channels. 2 for Stereo (OPL3 requires 2)
+#define MIX_CHANNELS            2
 
-// 11025*4  44100  49716
-#define SAMPLERATE		11025*SR_MULTIPLIER
-#define SAMPLESIZE		2
+// 11025  22050  44100  (49716)
+#define SAMPLERATE		22050
 
-// The actual lengths of all sound effects.
-static int 		lengths[NUMSFX];
+// 140 Hz music tick rate
+// 22050 / 140 = 157.5 (ideal chunk size) [192]
+// 24000 / 140 = 171.4                    [256]
+// 44100 / 140 = 315.0                    [384]
+#define CHUNK_SIZE              192
 
-// The global mixing buffer.
+// Sfx step shift (rate divider) 0=11025 1=22050 2=44100
+#define STEP_SHIFT              1
+
+
+// --------------------------------------------------------------------------
+// MIXER THREAD BEGINS
+
+// All code must LOCK `sfx_mutex` to access the data in this zone.
+
+static mutex_t sfx_mutex = {0};
+
+static void* sfx_data[NUMSFX] = {0};
+static int sfx_length[NUMSFX] = {0};
+
 // Basically, samples from all active internal channels
 //  are modifed and added, and stored in the buffer
 //  that is submitted to the audio device.
-static signed short	*mixbuffer; // [MIXBUFFERSIZE]
 
-// OPL3 generates a stereo pair for each sample.
-static int16_t          music_mixbuffer[SAMPLECOUNT*SR_MULTIPLIER];
+static size_t           mix_samplecount = 0;
 
 // The channel step amount...
 static unsigned int	channelstep[NUM_CHANNELS];
 // ... and a 0.16 bit remainder of last step.
 static unsigned int	channelstepremainder[NUM_CHANNELS];
-
 
 // The channel data pointers, start and end.
 static unsigned char*	channels[NUM_CHANNELS];
@@ -130,22 +135,215 @@ static int*		channelrightvol_lookup[NUM_CHANNELS];
 
 static unsigned int     nexthandle = 0;
 
+
+// Music stuff.
+
+// OPL3 generates a stereo pair for each sample.
+static int16_t*         music_buffer = 0; // dynamic size
+
 // Derived 0-127 volume used in mixing.
-static int 	music_paused = 0;
-static int 	music_playing = 0;
-static void*    music_data = 0;
-static int      music_lasttic = 0;
+static int 		music_volume = 127;
+
+// Time tracking for the music player, 140 ticks per second.
+static int      	music_lasttic = 0;
+
+// Game has started the music playing.
+static int 		music_playing = 0;
+
+// Game has paused music (network stall?)
+static int 		music_paused = 0;
+
 #if defined(OPL_NUKED)
 static opl3_chip music_opl3 = {0};
 
+// On the mixer thread.
 void adlib_write(int reg, int val) {
     OPL3_WriteReg(&music_opl3, reg, val);
 }
 #endif
 
+
+// On the mixer thread with LOCK held.
+static void mix_music(int musvol, int sample_count) {
+	// advance the score, update adlib state.
+	int thistic = I_GetSoundTime(); // in 1/140ths (140 Hz)
+	int numtics = thistic - music_lasttic;
+	music_lasttic = thistic;
+	if (numtics > 0) {
+		music_playing = musplay_update(numtics);
+	}
+	// pull some samples from OPL.
+	if (musvol) {
+#if defined(OPL_NUKED)
+		OPL3_GenerateStream(&music_opl3, music_mixbuffer, sample_count);
+#else
+		adlib_getsample(music_buffer, sample_count);
+#endif
+	}
+}
+
+//
+// This function loops all active (internal) sound
+//  channels, retrieves a given number of samples
+//  from the raw sound data, modifies it according
+//  to the current (internal) channel parameters,
+//  mixes the per channel samples into the global
+//  mixbuffer, clamping it to the allowed range,
+//  and sets up everything for transferring the
+//  contents of the mixbuffer to the (two)
+//  hardware channels (left and right, that is).
+//
+// This function currently supports only 16bit.
+//
+// On the mixer thread, called by Audio device. Acquires LOCK.
+//
+static void mix_next_chunk( void* userdata, uint8_t* buffer, int buffer_size )
+{
+  // Mix current sound data.
+  // Data, from raw sound, for right and left.
+  register unsigned int	sample;
+  register int		dl;
+  register int		dr;
+  
+  // Pointers in global mixbuffer, left, right, end.
+  signed short*		leftout;
+  signed short*		rightout;
+  signed short*		leftend;
+  // Step in mixbuffer, left and right, thus two.
+  int			step;
+
+  // Mixing channel index.
+  int			chan;
+
+  // Music stuff.
+  int                   musvol;
+  int                   music_on;
+  int16_t*              musicsample;
+  int			clipped;
+    
+  int16_t*              mixbuffer = (int16_t*)buffer;
+
+    Mutex_Lock(&sfx_mutex);
+
+    musvol = music_volume;
+    music_on = music_playing && !music_paused;
+    musicsample = music_buffer;
+    clipped = 0;
+
+    if (music_on) {
+	mix_music(musvol, mix_samplecount);
+    }
+
+    // Left and right channel
+    //  are in global mixbuffer, alternating.
+    leftout = mixbuffer;
+    rightout = mixbuffer+1;
+    step = 2;
+
+    // Determine end, for left channel only
+    //  (right channel is implicit).
+    leftend = mixbuffer + mix_samplecount*step;
+
+    // Mix sounds into the mixing buffer.
+    // Loop over step*samplecount,
+    //  that is 512 values for two channels.
+    while (leftout != leftend)
+    {
+	// Reset left/right value. 
+	dl = 0;
+	dr = 0;
+
+	// Love thy L2 chache - made this a loop.
+	// Now more channels could be set at compile time
+	//  as well. Thus loop those  channels.
+	for ( chan = 0; chan < NUM_CHANNELS; chan++ )
+	{
+	    // Check channel, if active.
+	    if (channels[ chan ])
+	    {
+		// Get the raw data from the channel. 
+		sample = *channels[ chan ];
+		// Add left and right part
+		//  for this channel (sound)
+		//  to the current data.
+		// Adjust volume accordingly.
+		dl += channelleftvol_lookup[ chan ][sample];
+		dr += channelrightvol_lookup[ chan ][sample];
+		// Apply pitch step to offset, 16.16 fixed point.
+		channelstepremainder[ chan ] += channelstep[ chan ];
+		// Advance by integer part in high 16 bits.
+		channels[ chan ] += channelstepremainder[ chan ] >> 16;
+		// Keep remainder in low 16 bits.
+		channelstepremainder[ chan ] &= 65536-1;
+
+		// Check whether we are done.
+		if (channels[ chan ] >= channelsend[ chan ])
+		    channels[ chan ] = 0;
+	    }
+	}
+
+	if (music_on && musvol) {
+		int sample = ((*musicsample++) * musvol) >> 7;  // left channel
+		dl += sample;
+#if defined(OPLTYPE_IS_OPL3) || defined(OPL_NUKED)
+		// OPL3 generates a stereo pair for each sample.
+		dr += ((*musicsample++) * musvol) >> 7;  // right channel
+#else
+		dr += sample;
+#endif
+	}
+
+	// Clamp to range. Left hardware channel.
+	// Has been char instead of short.
+	// if (dl > 127) *leftout = 127;
+	// else if (dl < -128) *leftout = -128;
+	// else *leftout = dl;
+
+	if (dl > 0x7fff) {
+	    *leftout = 0x7fff;
+	    clipped++;
+	} else if (dl < -0x8000) {
+	    *leftout = -0x8000;
+	    clipped++;
+	} else {
+	    *leftout = dl;
+	}
+
+	// Same for right hardware channel.
+	if (dr > 0x7fff) {
+	    *rightout = 0x7fff;
+	    clipped++;
+	} else if (dr < -0x8000) {
+	    *rightout = -0x8000;
+	    clipped++;
+	} else {
+	    *rightout = dr;
+	}
+
+	// Increment current pointers in mixbuffer.
+	leftout += step;
+	rightout += step;
+    }
+
+    Mutex_Unlock(&sfx_mutex);
+
+//     if (clipped > 0) {
+// 	printf("[MIXER] clipped %d\n", clipped);
+//     }
+
+    // UNUSED
+    buffer_size = 0;
+}
+
+// --------------------------------------------------------------------------
+// MIXER THREAD ENDS
+
+
+
 //
 // This function loads the sound data from the WAD lump,
 //  for single sound.
+// On the main thread.
 //
 static void*
 getsfx
@@ -192,7 +390,7 @@ getsfx
 
     // Pads the sound effect out to the mixing buffer size.
     // The original realloc would interfere with zone memory.
-    paddedsize = ((size-8 + (SAMPLECOUNT-1)) / SAMPLECOUNT) * SAMPLECOUNT;
+    paddedsize = ((size-8 + (mix_samplecount-1)) / mix_samplecount) * mix_samplecount;
 
     // Allocate from zone memory.
     paddedsfx = (unsigned char*)Z_Malloc( paddedsize+8, PU_STATIC, 0 );
@@ -216,18 +414,15 @@ getsfx
 }
 
 
-
-
-
 //
 // This function adds a sound to the
 //  list of currently active sounds,
 //  which is maintained as a given number
 //  (eight, usually) of internal channels.
 // Returns a handle.
+// On the main thread with LOCK held.
 //
-static int
-addsfx
+static int addsfx_with_lock
 ( int		sfxid,
   int		volume,
   int		step,
@@ -289,9 +484,9 @@ addsfx
     // Okay, in the less recent channel,
     //  we will handle the new SFX.
     // Set pointer to raw data.
-    channels[slot] = (unsigned char *) S_sfx[sfxid].data;
+    channels[slot] = (unsigned char *) sfx_data[sfxid];
     // Set pointer to end of raw data.
-    channelsend[slot] = channels[slot] + lengths[sfxid];
+    channelsend[slot] = channels[slot] + sfx_length[sfxid];
 
     // Set stepping (pitch)
     channelstep[slot] = step;
@@ -329,15 +524,12 @@ addsfx
     //  e.g. for avoiding duplicates of chainsaw.
     channelids[slot] = sfxid;
 
-    // Handle returned is next handle number combined with slot index.
+    // Handle is next handle number combined with slot index.
     channelhandles[slot] = nexthandle;
     handle = nexthandle | (unsigned int)slot;
     nexthandle += NUM_CHANNELS_POW2; // inc high bits above slot.
     return handle;
 }
-
-
-
 
 
 //
@@ -347,7 +539,7 @@ addsfx
 // old DPMS based DOS version, this
 // were simply dummies in the Linux
 // version.
-// See soundserver initdata().
+// On the main thread, before mixer thread starts. STARTS mixer.
 //
 void I_SetChannels()
 {
@@ -359,9 +551,6 @@ void I_SetChannels()
     
   int*	steptablemid = steptable + 128;
 
-  // allocate mix buffer
-  mixbuffer = Buffer_Create(ddev_mixbuf, MIXBUFFERSIZE, 0);
-  
   // Okay, reset internal mixing channels to zero.
   for (i=0; i<NUM_CHANNELS; i++)
   {
@@ -388,9 +577,21 @@ void I_SetChannels()
   char *op2 = W_CacheLumpNum( op2lump, PU_STATIC );
   musplay_op2bank(op2+8); // skip "#OPL_II#" to get BYTE[175][36] instrument data
   Z_Free( op2 );
-}	
 
- 
+#if defined(OPL_NUKED)
+	OPL3_Reset(&music_opl3, SAMPLERATE);
+#else
+	adlib_init(SAMPLERATE);
+#endif
+
+  // Start the mixer.
+  Audio_Start(ddev_sound);
+}
+
+
+
+// Set sound effects mixer volume.
+// On the main thread (API)
 void I_SetSfxVolume(int volume) // 0-127
 {
   // Identical to DOS.
@@ -401,17 +602,29 @@ void I_SetSfxVolume(int volume) // 0-127
   // This is handled via I_StartSound and I_UpdateSoundParams.
 }
 
+
 // MUSIC API. Some code from DOS version.
+// On the main thread. Acquires LOCK.
 void I_SetMusicVolume(int volume) // 0-127
 {
-  // Set the music player volume.
-  musplay_volume(volume);
+    if (volume < 0 || volume > 127)
+	I_Error("Attempt to set music volume at %d", volume);
+
+  // apply log-scaling to the requested volume.
+  // we can't use vol_lookup with 16-bit samples so this will do.
+  volume += 7; // a bit of boost at max volume
+  volume = (volume * volume) >> 7;
+
+  Mutex_Lock(&sfx_mutex);
+  music_volume = volume;
+  Mutex_Unlock(&sfx_mutex);
 }
 
 
 //
 // Retrieve the raw data lump index
 //  for a given SFX name.
+// On the main thread.
 //
 int I_GetSfxLumpNum(sfxinfo_t* sfx)
 {
@@ -419,6 +632,7 @@ int I_GetSfxLumpNum(sfxinfo_t* sfx)
     sprintf(namebuf, "ds%s", sfx->name);
     return W_GetNumForName(namebuf);
 }
+
 
 //
 // Starting a sound means adding it
@@ -432,6 +646,8 @@ int I_GetSfxLumpNum(sfxinfo_t* sfx)
 // Pitching (that is, increased speed of playback)
 //  is set, but currently not used by mixing.
 //
+// On the main thread. Acquires LOCK.
+//
 int
 I_StartSound
 ( int		id,
@@ -442,23 +658,24 @@ I_StartSound
 {
   int           handle;
 
+	Mutex_Lock(&sfx_mutex);
+
+	// Returns a handle, later used for I_UpdateSoundParams
+	// Assumes volume in 0..127
+	handle = addsfx_with_lock( id, vol, steptable[pitch], sep );
+
+	// fprintf( stderr, "/handle is %d\n", id );
+
+	Mutex_Unlock(&sfx_mutex);
+
   // UNUSED
   priority = 0;
-  
-  // Debug.
-  //fprintf( stderr, "starting sound %d", id );
-  
-  // Returns a handle (not used).
-  // Assumes volume in 0..127
-  handle = addsfx( id, vol, steptable[pitch], sep );
-
-  // fprintf( stderr, "/handle is %d\n", id );
-  
+    
   return handle;
 }
 
 
-
+// On the main thread. Acquires LOCK.
 void I_StopSound (int handle)
 {
   unsigned int h = handle; // modern UB.
@@ -470,169 +687,43 @@ void I_StopSound (int handle)
   
   int slot = h & (NUM_CHANNELS_POW2-1);
 
+  Mutex_Lock(&sfx_mutex);
+
   // Check if the slot is still playing the same handle.
   if (channels[slot] && channelhandles[slot] == (h & ~(NUM_CHANNELS_POW2-1))) {
 	// Reset.
 	channels[slot] = 0;
   }
+
+  Mutex_Unlock(&sfx_mutex);
 }
 
 
+// On the main thread. Acquires LOCK.
 int I_SoundIsPlaying(int handle)
 {
+  int playing = 0;
   unsigned int h = handle; // modern UB.
 
   int slot = h & (NUM_CHANNELS_POW2-1);
 
+  Mutex_Lock(&sfx_mutex);
+
   // Check if the slot is still playing the same handle.
   if (channels[slot] && channelhandles[slot] == (h & ~(NUM_CHANNELS_POW2-1))) {
-	return 1;
+	playing = 1;
   }
 
-  return 0;
+  Mutex_Unlock(&sfx_mutex);
+
+  return playing;
 }
 
 
-static void mix_music(void) {
-	// advance the score, update adlib state.
-	int thistic = I_GetSoundTime(); // in 1/140ths (140 Hz)
-	int numtics = thistic - music_lasttic;
-	music_lasttic = thistic;
-	if (numtics > 0) {
-		music_playing = musplay_update(numtics);
-	}
-	// pull some samples from OPL.
-#if defined(OPL_NUKED)
-	OPL3_GenerateStream(&music_opl3, music_mixbuffer, SAMPLECOUNT);
-#else
-	adlib_getsample(music_mixbuffer, SAMPLECOUNT);
-#endif
-}
-
-
-//
-// This function loops all active (internal) sound
-//  channels, retrieves a given number of samples
-//  from the raw sound data, modifies it according
-//  to the current (internal) channel parameters,
-//  mixes the per channel samples into the global
-//  mixbuffer, clamping it to the allowed range,
-//  and sets up everything for transferring the
-//  contents of the mixbuffer to the (two)
-//  hardware channels (left and right, that is).
-//
-// This function currently supports only 16bit.
-//
+// Not used.
 void I_UpdateSound( void )
 {
-  
-  // Mix current sound data.
-  // Data, from raw sound, for right and left.
-  register unsigned int	sample;
-  register int		dl;
-  register int		dr;
-  
-  // Pointers in global mixbuffer, left, right, end.
-  signed short*		leftout;
-  signed short*		rightout;
-  signed short*		leftend;
-  // Step in mixbuffer, left and right, thus two.
-  int				step;
-
-  // Mixing channel index.
-  int				chan;
-
-  int                   music_on = music_playing && !music_paused;
-  int16_t*              musicsample = music_mixbuffer;
-    
-    if (music_on) {
-	mix_music();
-    }
-
-    // Left and right channel
-    //  are in global mixbuffer, alternating.
-    leftout = mixbuffer;
-    rightout = mixbuffer+1;
-    step = 2;
-
-    // Determine end, for left channel only
-    //  (right channel is implicit).
-    leftend = mixbuffer + SAMPLECOUNT*step;
-
-    // Mix sounds into the mixing buffer.
-    // Loop over step*SAMPLECOUNT,
-    //  that is 512 values for two channels.
-    while (leftout != leftend)
-    {
-	// Reset left/right value. 
-	dl = 0;
-	dr = 0;
-
-	// Love thy L2 chache - made this a loop.
-	// Now more channels could be set at compile time
-	//  as well. Thus loop those  channels.
-	for ( chan = 0; chan < NUM_CHANNELS; chan++ )
-	{
-	    // Check channel, if active.
-	    if (channels[ chan ])
-	    {
-		// Get the raw data from the channel. 
-		sample = *channels[ chan ];
-		// Add left and right part
-		//  for this channel (sound)
-		//  to the current data.
-		// Adjust volume accordingly.
-		dl += channelleftvol_lookup[ chan ][sample];
-		dr += channelrightvol_lookup[ chan ][sample];
-		// Apply pitch step to offset, 16.16 fixed point.
-		channelstepremainder[ chan ] += channelstep[ chan ];
-		// Advance by integer part in high 16 bits.
-		channels[ chan ] += channelstepremainder[ chan ] >> 16;
-		// Throw away integer part, keep remainder.
-		channelstepremainder[ chan ] &= 65536-1;
-
-		// Check whether we are done.
-		if (channels[ chan ] >= channelsend[ chan ])
-		    channels[ chan ] = 0;
-	    }
-	}
-
-	if (music_on) {
-		int sample = *musicsample++;  // left channel
-		dl += sample;
-#if defined(OPLTYPE_IS_OPL3) || defined(OPL_NUKED)
-		// OPL3 generates a stereo pair for each sample.
-		sample = *musicsample++;  // right channel
-		dr += sample;
-#endif
-	}
-
-	// Clamp to range. Left hardware channel.
-	// Has been char instead of short.
-	// if (dl > 127) *leftout = 127;
-	// else if (dl < -128) *leftout = -128;
-	// else *leftout = dl;
-
-	if (dl > 0x7fff)
-	    *leftout = 0x7fff;
-	else if (dl < -0x8000)
-	    *leftout = -0x8000;
-	else
-	    *leftout = dl;
-
-	// Same for right hardware channel.
-	if (dr > 0x7fff)
-	    *rightout = 0x7fff;
-	else if (dr < -0x8000)
-	    *rightout = -0x8000;
-	else
-	    *rightout = dr;
-
-	// Increment current pointers in mixbuffer.
-	leftout += step;
-	rightout += step;
-    }
-
+  // Moved to mixer thread.
 }
 
 
@@ -646,12 +737,11 @@ void I_UpdateSound( void )
 void
 I_SubmitSound(void)
 {
-  // Write it to DSP device.
-  Audio_Submit(ddev_sound, ddev_mixbuf);   // XXX can't submit the same buffer over and over..
+  // Moved to mixer thread.
 }
 
 
-
+// On the main thread. Acquires LOCK.
 void
 I_UpdateSoundParams
 ( int	handle,
@@ -669,6 +759,8 @@ I_UpdateSoundParams
   //  and reset the channel parameters.
 
   int slot = h & (NUM_CHANNELS_POW2-1);
+
+  Mutex_Lock(&sfx_mutex);
 
   // Check if the slot is still playing the same handle.
   if (channels[slot] && channelhandles[slot] == (h & ~(NUM_CHANNELS_POW2-1))) {
@@ -702,32 +794,38 @@ I_UpdateSoundParams
     channelrightvol_lookup[slot] = &vol_lookup[rightvol*256];
 
   }
+
+   Mutex_Unlock(&sfx_mutex);
 }
 
 
 
 
+// On the main thread. STOPS MIXER.
 void I_ShutdownSound(void)
 {    
   // Wait till all pending sounds are finished.
-  int done = 0;
-  int i;
+  // int done = 0;
+  // int i;
   
 
   // FIXME (below).
   fprintf( stderr, "I_ShutdownSound: NOT finishing pending sounds\n");
   fflush( stderr );
   
-  while ( !done )
-  {
-    for( i=0 ; i<8 && !channels[i] ; i++);
-    
-    // FIXME. No proper channel output.
-    //if (i==8)
-    done=1;
-  }
-  
-  // Cleaning up -releasing the Audio device.
+  // while ( !done )
+  // {
+  //   for( i=0 ; i<8 && !channels[i] ; i++);
+  //   
+  //   // FIXME. No proper channel output.
+  //   //if (i==8)
+  //   done=1;
+  // }
+
+  // Stop the audio mixer and mixer thread.  
+  Audio_Stop(ddev_sound);
+
+  // Release the Audio device.
   System_DropCapability(ddev_sound);
 
   // Done.
@@ -735,10 +833,7 @@ void I_ShutdownSound(void)
 }
 
 
-
-
-
-
+// On the main thread, before mixer starts.
 void
 I_InitSound()
 { 
@@ -747,12 +842,14 @@ I_InitSound()
   // Secure and configure sound device first.
   fprintf( stderr, "I_InitSound: ");
 
-  Audio_Create(ddev_sound, ddev_sound_q, Audio_Fmt_S16, 2, SAMPLERATE, SAMPLECOUNT);
+  Mutex_Init(&sfx_mutex);
 
-  fprintf(stderr, " configured audio device\n" );
+  Audio_CreateStream(ddev_sound, mix_next_chunk, Audio_Fmt_S16, MIX_CHANNELS, SAMPLERATE, CHUNK_SIZE);
+  mix_samplecount = Audio_SampleCount(ddev_sound);
+  music_buffer = Buffer_Create(ddev_musicbuf, mix_samplecount*sizeof(int16_t)*2, 0);
 
   // Initialize external data (all sounds) at start, keep static.
-  fprintf( stderr, "I_InitSound: ");
+  fprintf( stderr, "I_InitSound: samplecount = %d\n", (int)mix_samplecount);
   
   for (i=1 ; i<NUMSFX ; i++)
   { 
@@ -760,30 +857,18 @@ I_InitSound()
     if (!S_sfx[i].link)
     {
       // Load data from WAD file.
-      S_sfx[i].data = getsfx( S_sfx[i].name, &lengths[i] );
+      S_sfx[i].data = sfx_data[i] = getsfx( S_sfx[i].name, &sfx_length[i] );
     }	
     else
     {
       // Previously loaded already?
-      S_sfx[i].data = S_sfx[i].link->data;
-      lengths[i] = lengths[(S_sfx[i].link - S_sfx)/sizeof(sfxinfo_t)];
+      S_sfx[i].data = sfx_data[i] = S_sfx[i].link->data;
+      sfx_length[i] = sfx_length[(S_sfx[i].link - S_sfx)/sizeof(sfxinfo_t)];
     }
   }
 
   fprintf( stderr, " pre-cached all sound data\n");
 
-#if defined(OPL_NUKED)
-  OPL3_Reset(&music_opl3, SAMPLERATE);
-#else
-  adlib_init(SAMPLERATE);
-#endif
-
-  fprintf( stderr, " initialised adlib player\n");
-  
-  // Now initialize mixbuffer with zero.
-  // for ( i = 0; i< MIXBUFFERSIZE; i++ )
-  //   mixbuffer[i] = 0;
-  
   // Finished initialization.
   fprintf(stderr, "I_InitSound: sound module ready\n");
 }
@@ -793,44 +878,56 @@ I_InitSound()
 
 //
 // MUSIC API.
-// Still no music done.
-// Remains. Dummies.
 //
 void I_InitMusic(void)		{ }
 void I_ShutdownMusic(void)	{ }
+
+// Only used here to communicate between I_RegisterSong and I_PlaySong
+static void*    last_registered_song = 0;
 
 void I_PlaySong(int handle, int loop)
 {
   // UNUSED.
   handle = 0;
-  if (music_data) {
-	musplay_start(music_data, loop);
+
+  if (last_registered_song) {
+	Mutex_Lock(&sfx_mutex);
+	musplay_start(last_registered_song, loop);
 	music_lasttic = I_GetSoundTime();
 	music_playing = 1;
+	Mutex_Unlock(&sfx_mutex);
   }
 }
 
 void I_PauseSong (int handle)
 {
   // UNUSED.
-  music_paused = 1;
   handle = 0;
+
+  Mutex_Lock(&sfx_mutex);
+  music_paused = 1;
+  Mutex_Unlock(&sfx_mutex);
 }
 
 void I_ResumeSong (int handle)
 {
   // UNUSED.
-  music_paused = 0;
   handle = 0;
+
+  Mutex_Lock(&sfx_mutex);
+  music_paused = 0;
+  Mutex_Unlock(&sfx_mutex);
 }
 
 void I_StopSong(int handle)
 {
   // UNUSED.
   handle = 0;
-  
+
+  Mutex_Lock(&sfx_mutex);
   music_playing = 0;
   musplay_stop();
+  Mutex_Unlock(&sfx_mutex);
 }
 
 void I_UnRegisterSong(int handle)
@@ -841,19 +938,24 @@ void I_UnRegisterSong(int handle)
 
 int I_RegisterSong(void* data)
 {
-  // UNUSED.
   // Always registered just before I_PlaySong.
-  // Always unregistered I_UnRegisterSong just after I_StopSong.
+  // Always unregistered just after I_StopSong.
   // Music lump data. Returns handle.
-  music_data = data;
-  
+  last_registered_song = data;
   return 1;
 }
 
 // Is the song playing?
 int I_QrySongPlaying(int handle)
 {
+  int playing = 0;
+
   // UNUSED.
   handle = 0;
-  return music_playing;
+
+  Mutex_Lock(&sfx_mutex);
+  playing = music_playing;
+  Mutex_Lock(&sfx_mutex);
+
+  return playing;
 }

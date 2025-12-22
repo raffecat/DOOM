@@ -33,6 +33,17 @@ void System_AcceptCapability(cap_t sender, size_t token, void* io_address, size_
 void Task_Create(int (*fn)(void* args), void* args);
 
 
+// MUTEXES
+
+typedef struct mutex_s {
+	void* m;
+} mutex_t;
+
+void Mutex_Init(mutex_t* mu);
+void Mutex_Lock(mutex_t* mu);
+void Mutex_Unlock(mutex_t* mu);
+
+
 // BUFFER [P]
 
 // Uses placement capabilities, i.e. you assign them.
