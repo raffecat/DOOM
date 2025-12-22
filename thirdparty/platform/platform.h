@@ -22,6 +22,7 @@ typedef enum FrameBuffer_OptsE {
     FrameBuffer_DynamicSize  = 8,  // host can resize the framebuffer (e.g. in a window; single-buffer sends a new Frame)
     FrameBuffer_NoScaleUp    = 16, // avoid scaling up the content (and create window at the requested size)
     FrameBuffer_NoSmooth     = 32, // use nearest-neighbour scaling or similar; prefer integer size multiples
+    FrameBuffer_Fullscreen   = 64, // set this to make the framebuffer fullscreen
 } FrameBuffer_Opts;
 
 typedef enum FrameBuffer_EventE {
@@ -81,6 +82,7 @@ typedef struct FrameBuffer_SyncEventE {
 void FrameBuffer_Create(cap_t fb_cap, FrameBuffer_Opts opts, size_t width, size_t height, size_t bpp, cap_t queue_cap);
 void FrameBuffer_Configure(cap_t fb_cap, FrameBuffer_Opts opts, size_t width, size_t height, size_t bpp, cap_t queue_cap);
 void FrameBuffer_SetTitle(cap_t fb_cap, const char* title);
+void FrameBuffer_SetFullscreen(cap_t fb_cap, int fullscreen);
 void FrameBuffer_SetPalette(cap_t fb_cap, cap_t buf_cap); // XXX transfer or share buffer?
 void FrameBuffer_Submit(cap_t fb_cap, cap_t buf_cap); // TRANSFER buffer from Video 'Frame' event
 

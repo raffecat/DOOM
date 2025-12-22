@@ -24,6 +24,7 @@ enum user_eventsE {
     uev_fb_frame = 0,
 } user_events;
 
+static int fb_fullscreen = 0;
 static uint32_t fb_cap = 0;
 static uint32_t fb_width = 0;
 static uint32_t fb_height = 0;
@@ -223,13 +224,18 @@ MasqEventHeader* Queue_Read(cap_t q_cap) {
 
             }
             case SDL_MOUSEBUTTONDOWN: {
-
             }
             case SDL_MOUSEBUTTONUP: {
 
             }
             case SDL_MOUSEWHEEL: {
 
+            }
+            case SDL_WINDOWEVENT_FOCUS_GAINED: {
+                // SDL_SetRelativeMouseMode(SDL_TRUE);
+            }
+            case SDL_WINDOWEVENT_FOCUS_LOST: {
+                // SDL_SetRelativeMouseMode(SDL_FALSE);
             }
             default: {
                 if (event.type == user_sdl_events + uev_fb_frame) {
@@ -311,8 +317,8 @@ void FrameBuffer_Create(cap_t cap, FrameBuffer_Opts opts, size_t width, size_t h
     window = SDL_CreateWindow(
         "Framebuffer",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        fb_disp_width, fb_disp_height,
-        0
+        fb_disp_width, (int)(fb_disp_height * 1.2),
+        SDL_WINDOW_RESIZABLE
     );
     if (!window) {
         printf("[RT] SDL_CreateWindow: %s\n", SDL_GetError());
@@ -343,10 +349,28 @@ void FrameBuffer_Create(cap_t cap, FrameBuffer_Opts opts, size_t width, size_t h
 }
 
 void FrameBuffer_Configure(cap_t fb_cap, FrameBuffer_Opts opts, size_t width, size_t height, size_t bpp, cap_t queue_cap) {
+        if (opts & FrameBuffer_Fullscreen) {
+                if (!fb_fullscreen) {
+                        fb_fullscreen = 1;
+                        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+                }
+        } else {
+                if (fb_fullscreen) {
+                        fb_fullscreen = 0;
+                        SDL_SetWindowFullscreen(window, 0);
+                }
+        }
 }
 
 void FrameBuffer_SetTitle(cap_t fb_cap, const char* title) {
-	SDL_SetWindowTitle(window, title);
+        SDL_SetWindowTitle(window, title);
+}
+
+void FrameBuffer_SetFullscreen(cap_t fb_cap, int fullscreen) {
+        if (fb_fullscreen != !!fullscreen) {
+                SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                fb_fullscreen = !!fullscreen;
+        }
 }
 
 void FrameBuffer_SetPalette(cap_t fb_cap, cap_t buf_cap) {
@@ -377,8 +401,8 @@ void FrameBuffer_Submit(cap_t fb_cap, cap_t buf_cap) {
             col_ofs += one_step;
         }
         dst_row += pitch;
-	row_ofs += one_step;
-	col_ofs = 0;
+        row_ofs += one_step;
+        col_ofs = 0;
     }
     // display the frame.
     SDL_UnlockTexture(texture);

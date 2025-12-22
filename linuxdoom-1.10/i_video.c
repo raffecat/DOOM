@@ -60,10 +60,11 @@ int		X_height;
 //  Translates the key currently in X_event
 //
 
-int xlatekey(int code, int mod)
+int xlatekey(int code, int mod, int down)
 {
 
     int rc;
+    static int fullscreen = 0;
 
     switch(code & 0xFFF)
     {
@@ -71,8 +72,18 @@ int xlatekey(int code, int mod)
 	case MasqKey_RightArrow:rc = KEY_RIGHTARROW;	break;
 	case MasqKey_DownArrow:	rc = KEY_DOWNARROW;	break;
 	case MasqKey_UpArrow:	rc = KEY_UPARROW;	break;
+	// case MasqKey_A:	rc = KEY_LEFTARROW;	break;
+	// case MasqKey_D:	rc = KEY_RIGHTARROW;	break;
+	// case MasqKey_S:	rc = KEY_DOWNARROW;	break;
+	// case MasqKey_W:	rc = KEY_UPARROW;	break;
 	case MasqKey_Escape:	rc = KEY_ESCAPE;	break;
-	case MasqKey_Return:	rc = KEY_ENTER;		break;
+	case MasqKey_Return:
+		rc = KEY_ENTER;
+		if (mod & MasqKeyModifierLAlt && down) {
+			fullscreen ^= 1;
+			FrameBuffer_SetFullscreen(ddev_fb, fullscreen);
+		}
+		break;
 	case MasqKey_Tab:	rc = KEY_TAB;		break;
 	case MasqKey_F1:	rc = KEY_F1;		break;
 	case MasqKey_F2:	rc = KEY_F2;		break;
@@ -98,9 +109,11 @@ int xlatekey(int code, int mod)
 	case MasqKey_KeypadMinus:
 	case MasqKey_Minus:	rc = KEY_MINUS;		break;
 
+	// Sprint
 	case MasqKey_LeftShift:
 	case MasqKey_RightShift:rc = KEY_RSHIFT;	break;
 
+	// Fire
 	case MasqKey_LeftCtrl:
 	case MasqKey_RightCtrl:	rc = KEY_RCTRL;		break;
 
@@ -228,14 +241,14 @@ void I_GetEvent(void)
 			case Input_KeyDown:
 				kev = (Input_KeyEvent*)qev;
 				event.type = ev_keydown;
-				event.data1 = xlatekey(kev->keycode, kev->modifiers);
+				event.data1 = xlatekey(kev->keycode, kev->modifiers, 0);
 				D_PostEvent(&event);
 				// fprintf(stderr, "k");
 				break;
 			case Input_KeyUp:
 				kev = (Input_KeyEvent*)qev;
 				event.type = ev_keyup;
-				event.data1 = xlatekey(kev->keycode, kev->modifiers);
+				event.data1 = xlatekey(kev->keycode, kev->modifiers, 1);
 				D_PostEvent(&event);
 				// fprintf(stderr, "ku");
 				break;
@@ -470,7 +483,7 @@ void I_InitGraphics(void)
 
     // create the main window
 	FrameBuffer_Create(ddev_fb, FrameBuffer_DoubleBuffer|FrameBuffer_Palette|FrameBuffer_NoSmooth, SCREENWIDTH, SCREENHEIGHT, 8, ddev_main_q);
-	FrameBuffer_SetTitle(ddev_fb, "the OG");
+	FrameBuffer_SetTitle(ddev_fb, "the OG, DOOM");
 
 	// create palette
 	// XXX do we create this buffer or does the FrameBuffer?
