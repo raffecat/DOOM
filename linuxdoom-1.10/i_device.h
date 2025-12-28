@@ -11,7 +11,7 @@ enum DOOM_devices {
     ddev_mixbuf   = 9,
     ddev_musicbuf = 10,
     ddev_main_q   = 11,
-    ddev_sound_q  = 12,
+    ddev_musicmix = 12,
 };
 
 // DOOM IO Area Map (4K pages)

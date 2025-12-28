@@ -23,10 +23,10 @@ elif [ "$OS_NAME" = "darwin" ]; then
     SDL_L="-L$SDL/lib"
 fi
 
-OPL=woody-opl    # use -DOPLTYPE_IS_OPL3 (needs OPL3)
-#OPL=Nuked-OPL3  # use -DOPL_NUKED
+#OPL=woody-opl  # use -DOPLTYPE_IS_OPL3 (needs OPL3)
+OPL=Nuked-OPL3  # use -DOPL_NUKED
 
-clang -g -Wall -DNORMALUNIX=1 -DOPLTYPE_IS_OPL3 \
+clang -g -Wall -DNORMALUNIX=1 -DOPL_NUKED \
   -Ithirdparty/platform \
   -Ithirdparty/musplayer \
   -Ithirdparty/$OPL \

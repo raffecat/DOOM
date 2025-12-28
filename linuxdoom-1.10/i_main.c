@@ -48,7 +48,6 @@ main
     System_Init(); // XXX would be in CRT
 
     Queue_New(ddev_main_q, dio_main_q, 1);
-    Queue_New(ddev_sound_q, dio_sound_q, 1);
  
     D_DoomMain (); 
 
