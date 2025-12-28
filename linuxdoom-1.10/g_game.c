@@ -255,6 +255,7 @@ void G_BuildTiccmd (ticcmd_t* cmd)
  
     strafe = gamekeydown[key_strafe] || mousebuttons[mousebstrafe] 
 	|| joybuttons[joybstrafe]; 
+    // AJT: always run, unless walk button is held down.
     speed = !(gamekeydown[key_speed] || joybuttons[joybspeed]);
  
     forward = side = 0;
