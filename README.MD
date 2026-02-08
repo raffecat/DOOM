@@ -37,7 +37,7 @@ git submodule update --init --recursive
 Assuming you have something like `apt`:
 
 ```sh
-apt install build-essential sdl2 clang
+apt install build-essential libsdl2-dev libsdl2 clang
 make
 ```
 

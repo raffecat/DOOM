@@ -8,6 +8,7 @@ if [ "$OS_NAME" = "linux" ]; then
         echo "'sdl2-config --cflags' didn't return anything - is SDL2 installed?)"
         exit 1
     fi
+    SDL_L="$SDL_L/SDL2"
 elif [ "$OS_NAME" = "darwin" ]; then
     BREW=`brew --prefix`
     if [ "$BREW" = "" ]; then
@@ -19,11 +20,11 @@ elif [ "$OS_NAME" = "darwin" ]; then
         echo "'brew --prefix sdl2' didn't return a path - is SDL2 installed?)"
         exit 1
     fi
-    SDL_I="-I$SDL/include"
+    SDL_I="-I$SDL/include/SDL2"
     SDL_L="-L$SDL/lib"
 fi
 
-clang -g -Wall -DNORMALUNIX \
+clang -O2 -Wall -DNORMALUNIX \
   -Ithirdparty/platform \
   -Ithirdparty/LittleMUS \
   -Ithirdparty/Nuked-OPL3 \

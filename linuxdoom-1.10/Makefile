@@ -27,7 +27,7 @@ SDL := $(shell brew --prefix sdl2)
 ifeq ($(SDL),)
 $(error "brew --prefix sdl2" didn't return a path - is SDL2 installed?)
 endif
-SDL_I := -I$(SDL)/include
+SDL_I := -I$(SDL)/include/SDL2
 SDL_L := -L$(SDL)/lib
 
 endif
