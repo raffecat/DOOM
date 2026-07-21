@@ -187,6 +187,9 @@ void I_ShutdownGraphics(void)
 
 void I_GetEvent(void);
 
+extern boolean	menuactive;
+boolean	menuwasactive = false;
+
 //
 // I_StartFrame
 //
@@ -196,6 +199,16 @@ void I_StartFrame (void)
     while (!VFrameCap) {
 	Queue_Wait(ddev_main_q);
 	I_GetEvent();
+    }
+
+    // Show/Hide the mouse.
+    if (menuactive != menuwasactive) {
+	menuwasactive = menuactive;
+	if (menuactive) {
+	    FrameBuffer_ShowPointer(ddev_fb, 1);
+	} else {
+	    FrameBuffer_ShowPointer(ddev_fb, 0);
+	}
     }
 }
 
