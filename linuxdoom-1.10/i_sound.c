@@ -63,27 +63,24 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 // Number of output channels. 2 for Stereo (OPL3 requires 2)
 #define MIX_CHANNELS		2
 
-// Prefer 44100 because it's exactly 4x the sfx recordings
-#define MIX_SAMPLERATE		44100
-
 // Based on the 140 Hz music tick rate
 // 22050 / 140 = 157.5 (ideal chunk size) [192]
 // 24000 / 140 = 171.4                    [256]
 // 44100 / 140 = 315.0                    [384]
+// 48000 / 140 = 342.8                    [384]
 #define MIX_CHUNK_SIZE		512
 
-// Sfx step shift (rate divider) 0=11025 1=22050 2=44100
-// Must match the MIX_CHUNK_SIZE above
-#define SFX_STEP_SHIFT		2
+// Prefer 48000 to match OS mixer
+#define MIX_SAMPLERATE		48000
+
+// Low-pass filter (1-pole)
+#define OPL_CUTOFF_HZ           24000
 
 // SB Pro used a fixed 12dB/oct LPF @ 3.2kHz (2-pole Butterworth biquad)
 // Tweaking this a little.. things sounded better in the past
 #define PCM_CUTOFF_HZ           4400
 // Butterworth ~0.707, add a bit of passband droop to emphasize the low end
 #define PCM_Q_FACTOR            0.6f
-
-// Low-pass filters
-#define OPL_CUTOFF_HZ           (MIX_SAMPLERATE/2)
 
 
 // --------------------------------------------------------------------------
@@ -127,7 +124,7 @@ static unsigned int 	channelhandles[NUM_CHANNELS];
 // Used to catch duplicates (like chainsaw).
 static int		channelids[NUM_CHANNELS];			
 
-// Pitch to stepping lookup, unused.
+// Pitch to stepping lookup.
 static int		steptable[256];
 
 // Volume lookups.
@@ -315,10 +312,10 @@ static void mix_samples( int16_t* mixbuffer, int samples_needed )
 		// Advance by integer part in high 16 bits.
 		// To quadruple the sample-rate, we must slow down
 		// the stepping speed by 4x (add 1/4 of the actual step)
-		channels[ chan ] += channelstepremainder[ chan ] >> (16+SFX_STEP_SHIFT);
+		channels[ chan ] += channelstepremainder[ chan ] >> 16;
 		// Keep remainder in low 16 bits.
 		// As above, we need to keep an extra *4 (2 bits)
-		channelstepremainder[ chan ] &= (1<<(16+SFX_STEP_SHIFT))-1;
+		channelstepremainder[ chan ] &= (1<<16)-1;
 
 		// Check whether we are done.
 		if (channels[ chan ] >= channelsend[ chan ])
@@ -522,7 +519,8 @@ static int addsfx_with_lock
     channelsend[slot] = channels[slot] + sfx_length[sfxid];
 
     // Set stepping (pitch)
-    channelstep[slot] = step;
+    // 48000/11025 = 4.35374149659864 (15052/65536)
+    channelstep[slot] = (unsigned)((int64_t)step * 15052) >> 16;
     // Initial offset in sample.
     channelstepremainder[slot] = 0;
     // Should be gametic, I presume.
@@ -799,7 +797,8 @@ I_UpdateSoundParams
   if (channels[slot] && channelhandles[slot] == (h & ~(NUM_CHANNELS_POW2-1))) {
 	
     // Set stepping (pitch)
-    channelstep[slot] = steptable[pitch];
+    // 48000/11025 = 4.35374149659864 (15052/65536)
+    channelstep[slot] = (unsigned)((int64_t)steptable[pitch] * 15052) >> 16;
 
     // Separation, that is, orientation/stereo.
     //  range is: 1 - 256
