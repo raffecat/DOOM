@@ -24,7 +24,7 @@ elif [ "$OS_NAME" = "darwin" ]; then
     SDL_L="-L$SDL/lib"
 fi
 
-clang -g -Wall -DNORMALUNIX \
+clang -O2 -Wall -DNORMALUNIX \
   -Ithirdparty/platform \
   -Ithirdparty/LittleMUS \
   -Ithirdparty/Nuked-OPL3 \
