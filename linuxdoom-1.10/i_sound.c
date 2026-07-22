@@ -28,8 +28,6 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #include <stdlib.h>
 #include <stdarg.h>
 
-#include <math.h>
-
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -49,6 +47,7 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #include "i_device.h"
 
 #include "musdriver.h"
+#include "i_biquadlpf.h"
 
 
 // The number of internal mixing channels,
@@ -64,10 +63,9 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 #define MIX_CHANNELS		2
 
 // Based on the 140 Hz music tick rate
-// 22050 / 140 = 157.5 (ideal chunk size) [192]
-// 24000 / 140 = 171.4                    [256]
-// 44100 / 140 = 315.0                    [384]
-// 48000 / 140 = 342.8                    [384]
+// Should be a power of two.
+// 44100 / 140 = 315.0         [512]
+// 48000 / 140 = 342.8         [512]
 #define MIX_CHUNK_SIZE		512
 
 // Prefer 48000 to match OS mixer
@@ -151,60 +149,17 @@ static Atomic_Ptr 	music_finished = {0};
 // Game has paused music (network stall?)
 static Atomic_Int 	music_paused = {0};
 
-
-// PCM filter:
-// 2-Pole (2nd‑order) Butterworth biquad LPF at 3.2 kHz (Q = ~0.707)
-// Exact −3 dB at 3.2 kHz; −12 dB/oct slope.
-// Direct Form II Transposed (DF2T) with z1, z2 states.
-
-typedef struct {
-    float b0, b1, b2; // feedforward
-    float a1, a2;     // feedback (a0 normalized to 1)
-    float z1, z2;     // state
-} BiquadLP;
-
-BiquadLP pcm_lpf_left = {0};
-BiquadLP pcm_lpf_right = {0};
-
-// Bilinear-transform LPF
-static inline void biquadlp_init(BiquadLP *b, float sample_rate, float cutoff_hz, float Q) {
-    float w0   = 2.0f * (float)M_PI * cutoff_hz / sample_rate;
-    float cw   = cosf(w0);
-    float sw   = sinf(w0);
-    float alpha= sw / (2.0f * Q);
-
-    float a0 = 1.0f + alpha;
-    float a1 = -2.0f * cw;
-    float a2 = 1.0f - alpha;
-    float b0 = (1.0f - cw) * 0.5f;
-    float b1 = 1.0f - cw;
-    float b2 = (1.0f - cw) * 0.5f;
-
-    // normalize
-    b->b0 = b0 / a0;
-    b->b1 = b1 / a0;
-    b->b2 = b2 / a0;
-    b->a1 = a1 / a0;
-    b->a2 = a2 / a0;
-
-    b->z1 = b->z2 = 0.0f;
-}
-
-static inline int biquadlp_step(BiquadLP *b, float x) {
-    float y = b->b0 * x + b->z1;
-    b->z1 = b->b1 * x - b->a1 * y + b->z2;
-    b->z2 = b->b2 * x - b->a2 * y;
-    return (int)y;              // quantize the sample
-}
+I_BiquadLPF pcm_lpf_left = {0};
+I_BiquadLPF pcm_lpf_right = {0};
 
 static void* mixer_last_song = 0;     // last song ptr we received
 static mus_driver_t music_driver = {0};
 
 // On the music thread, no LOCK held.
-static void mix_music( int mix_frames_needed ) {
-	int musvol = Atomic_Get_Int(&music_volume);
+static void mix_music( unsigned mix_frames_needed ) {
 	void* song = Atomic_Get_Ptr_Acquire(&music_songptr);
 	int loop = Atomic_Get_Int(&music_loop); // after acquire
+	int musvol = Atomic_Get_Int(&music_volume); // ^ combine?
 	if (song != mixer_last_song) {
 		// game has stopped the music, or started a new track.
 		if (music_driver.playing) {
@@ -216,7 +171,7 @@ static void mix_music( int mix_frames_needed ) {
 		mixer_last_song = song;
 	}
 
-	int need_mix = musvol && music_driver.playing && !Atomic_Get_Int(&music_paused);
+	int need_mix = musvol && music_driver.playing && !Atomic_Get_Int(&music_paused); // ^ combine?
 	if (!need_mix) {
 		memset(music_downmix, 0, mix_frames_needed*sizeof(int16_t)*MIX_CHANNELS);
 		return;
@@ -224,7 +179,8 @@ static void mix_music( int mix_frames_needed ) {
 
 	// generate OPL samples, tick the music player
 	float volume = (float)(musvol) * 2.0f / 127.0f;
-	if (!musdriver_generate(&music_driver, music_downmix, mix_frames_needed, volume)) {
+	if (!musdriver_generate(&music_driver, music_downmix, (uint32_t)mix_frames_needed, volume)) {
+		fprintf( stderr, "I_Sound: musdriver_generate overflows buffer\n");
 		return; // buffer overflow
 	}
 	if (!music_driver.playing) {
@@ -250,7 +206,7 @@ static void mix_music( int mix_frames_needed ) {
 //
 // On the mixer thread. Acquires LOCK.
 //
-static void mix_samples( int16_t* mixbuffer, int samples_needed )
+static void mix_samples( int16_t* mixbuffer, unsigned samples_needed )
 {
     // Mix current sound data.
     // Data, from raw sound, for right and left.
@@ -324,8 +280,8 @@ static void mix_samples( int16_t* mixbuffer, int samples_needed )
 	}
 
 	// Write interleaved samples (left, right)
-	dl = biquadlp_step(&pcm_lpf_left, dl);  // left channel
-	dr = biquadlp_step(&pcm_lpf_right, dr);  // right channel
+	dl = i_biquadlpf_step(&pcm_lpf_left, dl);  // left channel
+	dr = i_biquadlpf_step(&pcm_lpf_right, dr);  // right channel
 
 	dl += musicbuf[0];
 	dr += musicbuf[1];
@@ -355,9 +311,11 @@ static void mix_samples( int16_t* mixbuffer, int samples_needed )
 
 static void mix_callback( void* userdata, uint8_t* buffer, int buffer_size ) {
 	int16_t* mixbuf = (int16_t*)buffer;
-	int samples_needed = (buffer_size / sizeof(int16_t));
-	int frames_needed = samples_needed/MIX_CHANNELS;
+	unsigned buf_size = (unsigned)buffer_size;
+	unsigned samples_needed = (buf_size / sizeof(int16_t));
+	unsigned frames_needed = samples_needed / MIX_CHANNELS;
 	if (frames_needed > mix_max_frames) {
+		fprintf( stderr, "I_Sound: mix_callback overflows buffer\n");
 		return; // overflows buffer
 	}
 	mix_music( frames_needed );
@@ -613,8 +571,8 @@ void I_SetChannels()
   Z_Free( op2 );
 
   // Initialise audio.
-  biquadlp_init(&pcm_lpf_left, MIX_SAMPLERATE, PCM_CUTOFF_HZ, PCM_Q_FACTOR);
-  biquadlp_init(&pcm_lpf_right, MIX_SAMPLERATE, PCM_CUTOFF_HZ, PCM_Q_FACTOR);
+  i_biquadlpf_init(&pcm_lpf_left, MIX_SAMPLERATE, PCM_CUTOFF_HZ, PCM_Q_FACTOR);
+  i_biquadlpf_init(&pcm_lpf_right, MIX_SAMPLERATE, PCM_CUTOFF_HZ, PCM_Q_FACTOR);
 
   // Start audio.
   // CONCURRENCY: starts mixer thread, full memory barrier.
