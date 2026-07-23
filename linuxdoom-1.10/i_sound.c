@@ -71,8 +71,8 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 // Prefer 48000 to match OS mixer
 #define MIX_SAMPLERATE		48000
 
-// Low-pass filter (1-pole)
-#define OPL_CUTOFF_HZ           24000
+// Music Low-pass Filter
+#define OPL_CUTOFF_HZ           22500
 
 // SB Pro used a fixed 12dB/oct LPF @ 3.2kHz (2-pole Butterworth biquad)
 // Tweaking this a little.. things sounded better in the past
