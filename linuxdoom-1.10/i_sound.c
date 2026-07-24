@@ -843,7 +843,7 @@ I_InitSound()
   music_downmix = Buffer_Create(ddev_musicmix, mix_max_frames*sizeof(int16_t)*MIX_CHANNELS, 0);
 
   // Initialize external data (all sounds) at start, keep static.
-  fprintf( stderr, "I_InitSound: sfx_max=%d opl_max=%d\n", (int)mix_max_frames, (int)music_driver.opl_max_frames);
+  fprintf( stderr, " sfx_max=%d opl_max=%d", (int)mix_max_frames, (int)music_driver.opl_max_frames);
 
   for (i=1 ; i<NUMSFX ; i++)
   { 
