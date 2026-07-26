@@ -87,7 +87,7 @@ rcsid[] = "$Id: i_unix.c,v 1.5 1997/02/03 22:45:10 b1 Exp $";
 // All code must LOCK `mix_mutex` to access the data in this zone.
 // XXX move towards queued commands into the mixer.
 
-static mutex_t mix_mutex = {0};
+static Sys_Mutex mix_mutex = {0};
 
 static void* sfx_data[NUMSFX] = {0};
 static int sfx_length[NUMSFX] = {0};

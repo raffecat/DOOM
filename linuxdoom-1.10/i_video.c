@@ -219,10 +219,7 @@ void I_StartFrame (void)
 void I_GetEvent(void)
 {
     event_t event;
-    MasqEventHeader *qev;
-    Input_KeyEvent *kev;
-    Input_PointerEvent *pev;
-    FrameBuffer_FrameEvent *fev;
+    MasqEvent *qev;
 
     // put event-grabbing stuff in here
     qev = Queue_Read(ddev_main_q);
@@ -240,8 +237,7 @@ void I_GetEvent(void)
 		switch (qev->event)
 		{
 			case FrameBuffer_Frame:
-				fev = (FrameBuffer_FrameEvent*)qev;
-				VFrameCap = fev->buf_cap;
+				VFrameCap = qev->fb_frame.buf_cap;
 				break;
 		}
 		break;
@@ -249,44 +245,37 @@ void I_GetEvent(void)
 		switch (qev->event)
 		{
 			case Input_KeyDown:
-				kev = (Input_KeyEvent*)qev;
 				event.type = ev_keydown;
-				event.data1 = xlatekey(kev->keycode, kev->modifiers, 0);
+				event.data1 = xlatekey(qev->in_key.keycode, qev->in_key.modifiers, 0);
 				D_PostEvent(&event);
 				// fprintf(stderr, "k");
 				break;
 			case Input_KeyUp:
-				kev = (Input_KeyEvent*)qev;
 				event.type = ev_keyup;
-				event.data1 = xlatekey(kev->keycode, kev->modifiers, 1);
+				event.data1 = xlatekey(qev->in_key.keycode, qev->in_key.modifiers, 1);
 				D_PostEvent(&event);
 				// fprintf(stderr, "ku");
 				break;
 			case Input_ButtonDown:
-				pev = (Input_PointerEvent*)qev;
 				event.type = ev_mouse;
-				event.data1 = pev->buttons & 7; // 1,2,4
+				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
 				event.data2 = event.data3 = 0;
 				D_PostEvent(&event);
 				// fprintf(stderr, "b");
 				break;
 			case Input_ButtonUp:
-				pev = (Input_PointerEvent*)qev;
 				event.type = ev_mouse;
-				event.data1 = pev->buttons & 7; // 1,2,4
+				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
 				event.data2 = event.data3 = 0;
 				D_PostEvent(&event);
 				// fprintf(stderr, "bu");
 				break;
 			case Input_PointerMove:
-				pev = (Input_PointerEvent*)qev;
 				event.type = ev_mouse;
-				event.data1 = pev->buttons & 7; // 1,2,4
-				event.data2 = pev->x << 2;      // relative mouse movement
-				event.data3 = pev->y << 2;
-
-				if (event.data2 || event.data3)
-				{
+				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
+				event.data2 = qev->in_ptr.x << 2;      // relative mouse movement
+				event.data3 = qev->in_ptr.y << 2;
+				if (event.data2 || event.data3) {
 					D_PostEvent(&event);
 				}
 				break;
