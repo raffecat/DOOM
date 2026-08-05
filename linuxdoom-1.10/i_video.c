@@ -197,7 +197,7 @@ void I_StartFrame (void)
 {
     // Wait for the next FrameBuffer frame request.
     while (!VFrameCap) {
-	Queue_Wait(ddev_main_q);
+	SPSC_Wait(ddev_main_q);
 	I_GetEvent();
     }
 
@@ -219,14 +219,14 @@ void I_StartFrame (void)
 void I_GetEvent(void)
 {
     event_t event;
-    MasqEvent *qev;
+    MasqEvent qev;
 
     // put event-grabbing stuff in here
-    qev = Queue_Read(ddev_main_q);
-    switch (qev->cap)
+    if (!SPSC_Pop(ddev_main_q, &qev)) return;
+    switch (qev.cap)
     {
 	  case ddev_sys:
-		switch (qev->event)
+		switch (qev.event)
 		{
 			case System_Quit:
 				I_Quit ();
@@ -234,47 +234,47 @@ void I_GetEvent(void)
 		}
 		break;
 	  case ddev_fb:
-		switch (qev->event)
+		switch (qev.event)
 		{
-			case FrameBuffer_Frame:
-				VFrameCap = qev->fb_frame.buf_cap;
+			case FrameBuffer_RequestCmd:
+				VFrameCap = qev.fb_request.buf_cap;
 				break;
 		}
 		break;
 	  case ddev_input:
-		switch (qev->event)
+		switch (qev.event)
 		{
 			case Input_KeyDown:
 				event.type = ev_keydown;
-				event.data1 = xlatekey(qev->in_key.keycode, qev->in_key.modifiers, 0);
+				event.data1 = xlatekey(qev.in_key.keycode, qev.in_key.modifiers, 0);
 				D_PostEvent(&event);
 				// fprintf(stderr, "k");
 				break;
 			case Input_KeyUp:
 				event.type = ev_keyup;
-				event.data1 = xlatekey(qev->in_key.keycode, qev->in_key.modifiers, 1);
+				event.data1 = xlatekey(qev.in_key.keycode, qev.in_key.modifiers, 1);
 				D_PostEvent(&event);
 				// fprintf(stderr, "ku");
 				break;
 			case Input_ButtonDown:
 				event.type = ev_mouse;
-				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
+				event.data1 = qev.in_ptr.buttons & 7; // 1,2,4
 				event.data2 = event.data3 = 0;
 				D_PostEvent(&event);
 				// fprintf(stderr, "b");
 				break;
 			case Input_ButtonUp:
 				event.type = ev_mouse;
-				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
+				event.data1 = qev.in_ptr.buttons & 7; // 1,2,4
 				event.data2 = event.data3 = 0;
 				D_PostEvent(&event);
 				// fprintf(stderr, "bu");
 				break;
 			case Input_PointerMove:
 				event.type = ev_mouse;
-				event.data1 = qev->in_ptr.buttons & 7; // 1,2,4
-				event.data2 = qev->in_ptr.x << 2;      // relative mouse movement
-				event.data3 = qev->in_ptr.y << 2;
+				event.data1 = qev.in_ptr.buttons & 7; // 1,2,4
+				event.data2 = qev.in_ptr.x << 2;      // relative mouse movement
+				event.data3 = qev.in_ptr.y << 2;
 				if (event.data2 || event.data3) {
 					D_PostEvent(&event);
 				}
@@ -286,11 +286,6 @@ void I_GetEvent(void)
           default:
 		break;
     }
-
-    // XXX conditional on what?
-    if (qev->cap != -1) {
-    	Queue_Advance(ddev_main_q);
-    }
 }
 
 //
@@ -299,7 +294,7 @@ void I_GetEvent(void)
 void I_StartTic (void)
 {
 
-    while (!Queue_Empty(ddev_main_q))
+    while (!SPSC_Empty(ddev_main_q))
 		I_GetEvent();
 
     // mousemoved = false;
@@ -407,7 +402,7 @@ void I_WaitOKToDraw(void)
 {
 	// WAITING here... but DOOM assumes screens[0]stays valid after this..
 	do {
-		Queue_Wait(ddev_main_q);
+		SPSC_Wait(ddev_main_q);
 		I_GetEvent();
 	} while (!VFrameCap);
 
@@ -467,11 +462,11 @@ void I_InitGraphics(void)
     // }
 
     // setup attributes for main window
-	Input_Subscribe(ddev_input, InputOpt_Key|InputOpt_Button|InputOpt_Pointer, ddev_main_q);
+	Input_Configure(ddev_input, InputOpt_Key|InputOpt_Button|InputOpt_Pointer, ddev_main_q);
 
     // create the main window
-	FrameBuffer_Create(ddev_fb, FrameBuffer_DoubleBuffer|FrameBuffer_Palette|FrameBuffer_NoSmooth, SCREENWIDTH, SCREENHEIGHT, 8, ddev_main_q);
-	FrameBuffer_SetTitle(ddev_fb, "the OG, DOOM");
+	FrameBuffer_Configure(ddev_fb, FrameBuffer_DoubleBuffer|FrameBuffer_Palette|FrameBuffer_NoSmooth, SCREENWIDTH, SCREENHEIGHT, 8, ddev_main_q);
+	FrameBuffer_SetTitle(ddev_fb, "OG DOOM");
 
 	// create palette
 	// XXX do we create this buffer or does the FrameBuffer?

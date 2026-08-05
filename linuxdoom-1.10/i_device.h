@@ -3,23 +3,23 @@
 // DOOM device capabilities
 enum DOOM_devices {
     ddev_sys      = 0,
+    ddev_main_q   = 1,
     ddev_fb       = 2,
     ddev_sound    = 3,
     ddev_input    = 4,
     ddev_palette  = 5,
-    ddev_savebuf  = 8,
-    ddev_mixbuf   = 9,
-    ddev_musicbuf = 10,
-    ddev_main_q   = 11,
-    ddev_musicmix = 12,
+    ddev_savebuf  = 6,
+    ddev_mixbuf   = 7,
+    ddev_musicbuf = 8,
+    ddev_musicmix = 9,
 };
 
 // DOOM IO Area Map (4K pages)
-enum DOOM_IO_map {
-    dio_main_q = 0,
-    dio_sound_q = 1,
-    dio_sbuf_1 = 2,
-    dio_sbuf_2 = 3,
-    dio_fb_1   = 4,
-    dio_fb_2   = 5,
-};
+// enum DOOM_IO_map {
+//     dio_main_q = 0,
+//     dio_sound_q = 1,
+//     dio_sbuf_1 = 2,
+//     dio_sbuf_2 = 3,
+//     dio_fb_1   = 4,
+//     dio_fb_2   = 5,
+// };

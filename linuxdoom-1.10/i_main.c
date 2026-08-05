@@ -45,11 +45,12 @@ main
     myargc = argc; 
     myargv = argv; 
 
-    System_Init(); // XXX would be in CRT
+    System_Init();
 
-    Queue_New(ddev_main_q, dio_main_q, 1);
- 
-    D_DoomMain (); 
+    SPSC_New(ddev_main_q, 256);
+    Task_Create((System_TaskFunc)D_DoomMain, "DOOM", 0);
+
+    System_Run();
 
     return 0;
 } 

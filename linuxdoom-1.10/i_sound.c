@@ -576,7 +576,7 @@ void I_SetChannels()
 
   // Start audio.
   // CONCURRENCY: starts mixer thread, full memory barrier.
-  Audio_Start(ddev_sound);
+  Audio_Start(ddev_sound, 1);
 }
 
 
@@ -813,7 +813,7 @@ void I_ShutdownSound(void)
   // }
 
   // Stop the audio mixer and mixer thread.  
-  Audio_Stop(ddev_sound);
+  Audio_Start(ddev_sound, 0);
 
   // Release the Audio device.
   System_DropCapability(ddev_sound);
@@ -834,8 +834,9 @@ I_InitSound()
 
   Mutex_Init(&mix_mutex);
 
-  Audio_CreateStream(ddev_sound, mix_callback, Audio_Fmt_S16, MIX_CHANNELS, MIX_SAMPLERATE, MIX_CHUNK_SIZE);
-  mix_max_frames = Audio_FrameCount(ddev_sound); // init once
+  Audio_Configure(ddev_sound, mix_callback, Audio_Fmt_S16, MIX_CHANNELS, MIX_SAMPLERATE, MIX_CHUNK_SIZE);
+  //mix_max_frames = Audio_FrameCount(ddev_sound); // init once
+  mix_max_frames = 512;
 
   uint32_t buf_size = musdriver_opl_buf_size(MIX_SAMPLERATE, mix_max_frames);
   void* oplbuf = Buffer_Create(ddev_musicbuf, buf_size, 0);
